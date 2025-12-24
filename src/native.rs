@@ -1,0 +1,571 @@
+use crate::{
+    ast::{FunctionValue, Link, List, Symbol, Value},
+    interpreter::Interpreter,
+};
+
+pub fn add(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
+    let mut total = 0;
+
+    loop {
+        let Some(current) = link else {
+            break;
+        };
+
+        let result = interpreter.evaluate(current.value);
+        let result = match result {
+            Value::Integer(value) => value,
+            _ => {
+                return Value::Error(format!("Expected integer, received: {result}"));
+            }
+        };
+
+        total += result;
+
+        link = current.next;
+    }
+
+    return Value::Integer(total);
+}
+
+pub fn mul(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
+    let mut total = 1;
+
+    loop {
+        let Some(current) = link else {
+            break;
+        };
+
+        let result = interpreter.evaluate(current.value);
+        let result = match result {
+            Value::Integer(value) => value,
+            _ => {
+                return Value::Error(format!("Expected integer, received: {result}"));
+            }
+        };
+
+        total *= result;
+
+        link = current.next;
+    }
+
+    return Value::Integer(total);
+}
+
+pub fn sub(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
+    let Some(first) = link else {
+        return Value::Error("- expects at least 1 argument".into());
+    };
+
+    let mut total = match first.value {
+        Value::Integer(value) => value,
+        _ => {
+            return Value::Error(format!("Expected integer, received: {}", first.value));
+        }
+    };
+
+    // Single argument is a unary negation operation.
+    if first.next.is_none() {
+        return Value::Integer(-total);
+    }
+
+    link = first.next;
+
+    loop {
+        let Some(current) = link else {
+            break;
+        };
+
+        let result = interpreter.evaluate(current.value);
+        let result = match result {
+            Value::Integer(value) => value,
+            _ => {
+                return Value::Error(format!("Expected integer, received: {result}"));
+            }
+        };
+
+        total -= result;
+
+        link = current.next;
+    }
+
+    return Value::Integer(total);
+}
+
+/// Example:
+///
+/// (/ 5 2)
+pub fn div(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
+    let Some(first) = link else {
+        return Value::Error("/ expects at least 1 argument".into());
+    };
+
+    let mut total: f64 = match first.value {
+        Value::Integer(value) => value as f64,
+        Value::Float(value) => value as f64,
+        _ => {
+            return Value::Error(format!("Expected number, received: {}", first.value));
+        }
+    };
+
+    // Single argument is a unary division operation.
+    if first.next.is_none() {
+        return Value::Float(1.0 / total);
+    }
+
+    link = first.next;
+
+    loop {
+        let Some(current) = link else {
+            break;
+        };
+
+        let result = interpreter.evaluate(current.value);
+        let result = match result {
+            Value::Integer(value) => value as f64,
+            Value::Float(value) => value as f64,
+            _ => {
+                return Value::Error(format!("Expected number, received: {result}"));
+            }
+        };
+
+        total /= result;
+
+        link = current.next;
+    }
+
+    return Value::Float(total);
+}
+
+// Example:
+//
+// (error (wow we really don't support strings, huh?))
+pub fn error(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("error expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("error expects 1 argument".into());
+    }
+
+    Value::Error(link.value.to_string())
+}
+
+// Example:
+//
+// (lambda (a b) (+ a b))
+// > <FUNCTION>
+pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("missing parameter list".into());
+    };
+
+    let params = match link.value {
+        Value::List(list) => list,
+        _ => {
+            return Value::Error("missing parameter list".into());
+        }
+    };
+
+    fn params_to_symbols(params: Box<List>) -> Result<Vec<Symbol>, Value> {
+        params
+            .into_iter()
+            .map(|value| match value {
+                Value::Symbol(symbol) => Ok(symbol),
+                _ => Err(Value::Error(
+                    "parameter list may only contain symbols".into(),
+                )),
+            })
+            .collect::<Result<Vec<Symbol>, Value>>()
+    }
+
+    let params = match params_to_symbols(params) {
+        Ok(p) => p,
+        Err(err) => return err,
+    };
+
+    let Some(body) = link.next else {
+        return Value::Error("missing body".into());
+    };
+
+    if body.next.is_some() {
+        return Value::Error("trailing arguments after body found".into());
+    }
+
+    Value::Function(FunctionValue::new(params, Box::new(List::new(body))))
+}
+
+/// Example:
+///
+/// (apply (lambda (a b) (+ a b)) (5 2))
+/// > 7
+pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        // TODO: Support providing a symbol which represents the native function as input
+        return Value::Error("missing function reference".into());
+    };
+
+    let value = interpreter.evaluate(link.value);
+
+    let FunctionValue {
+        scope,
+        params,
+        body,
+    } = match value {
+        Value::Function(function) => function,
+        _ => {
+            return Value::Error(format!("missing function reference, got: {}", value));
+        }
+    };
+
+    let Some(arguments) = link.next else {
+        return Value::Error("apply is missing list arguments".into());
+    };
+
+    let arguments = interpreter.evaluate(arguments.value);
+    let arguments = match arguments {
+        Value::List(list) => list,
+        _ => {
+            return Value::Error(format!(
+                "apply is missing list arguments, got: {}",
+                arguments
+            ));
+        }
+    };
+
+    let arguments = arguments.into_iter().collect::<Vec<_>>();
+    if arguments.len() != params.len() {
+        return Value::Error(format!(
+            "param count {} does not match argument count {}",
+            params.len(),
+            arguments.len()
+        ));
+    }
+
+    {
+        let mut scope = scope.borrow_mut();
+        for (key, value) in params.into_iter().zip(arguments) {
+            scope.insert(key, value);
+        }
+    }
+    interpreter.push_scope(scope);
+    let result = progn(interpreter, body.head);
+    interpreter.pop_scope();
+
+    result
+}
+
+pub fn progn(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::default();
+    };
+
+    let mut result = Value::default();
+    for value in Link::iter(&link) {
+        result = interpreter.evaluate(value.clone());
+    }
+
+    result
+}
+
+pub fn setq(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("setq expects 2 arguments".into());
+    };
+
+    let value = interpreter.evaluate(link.value);
+    let symbol = match value {
+        Value::Symbol(symbol) => symbol,
+        _ => {
+            return Value::Error(format!(
+                "setq expects first argument to be a symbol, got: {value}"
+            ));
+        }
+    };
+
+    let Some(link) = link.next else {
+        return Value::Error("setq expects 2 arguments".into());
+    };
+
+    let value = interpreter.evaluate(link.value);
+
+    interpreter.set_global_value(symbol.clone(), value);
+
+    Value::Symbol(symbol)
+}
+
+pub fn eval(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("eval expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("eval expects 1 argument".into());
+    }
+
+    let value = interpreter.evaluate(link.value);
+
+    let list = match value {
+        Value::List(list) => list,
+        _ => {
+            return Value::Error(format!("eval expects argument to be a list, got: {value}"));
+        }
+    };
+
+    interpreter.evaluate_list(list)
+}
+
+fn cond(cond: bool) -> Value {
+    if cond {
+        Value::Symbol(Symbol::new("t".into()))
+    } else {
+        Value::default()
+    }
+}
+
+pub fn equal(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("equal expects 2 arguments".into());
+    };
+
+    let a = interpreter.evaluate(link.value);
+
+    let Some(link) = link.next else {
+        return Value::Error("equal expects 2 arguments".into());
+    };
+
+    let b = interpreter.evaluate(link.value);
+
+    cond(a.eq(&b))
+}
+
+pub fn less(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("equal expects 2 arguments".into());
+    };
+
+    let a = interpreter.evaluate(link.value);
+
+    let Some(link) = link.next else {
+        return Value::Error("equal expects 2 arguments".into());
+    };
+
+    let b = interpreter.evaluate(link.value);
+
+    let result = match (a, b) {
+        (Value::Integer(a), Value::Integer(b)) => a < b,
+        (Value::Float(a), Value::Float(b)) => a < b,
+        (Value::Integer(a), Value::Float(b)) => (a as f64) < b,
+        (Value::Float(a), Value::Integer(b)) => a < (b as f64),
+        _ => {
+            return Value::Error("Can't compare these two values".into());
+        }
+    };
+
+    cond(result)
+}
+
+pub fn more(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("equal expects 2 arguments".into());
+    };
+
+    let a = interpreter.evaluate(link.value);
+
+    let Some(link) = link.next else {
+        return Value::Error("equal expects 2 arguments".into());
+    };
+
+    let b = interpreter.evaluate(link.value);
+
+    let result = match (a, b) {
+        (Value::Integer(a), Value::Integer(b)) => a > b,
+        (Value::Float(a), Value::Float(b)) => a > b,
+        (Value::Integer(a), Value::Float(b)) => (a as f64) > b,
+        (Value::Float(a), Value::Integer(b)) => a > (b as f64),
+        _ => {
+            return Value::Error("Can't compare these two values".into());
+        }
+    };
+
+    cond(result)
+}
+
+pub fn not(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("not expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("not expects 1 argument".into());
+    }
+
+    let value = interpreter.evaluate(link.value);
+
+    cond(!value.is_true())
+}
+
+pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return cond(true);
+    };
+
+    let mut result = false;
+    for value in link.into_iter() {
+        let value = interpreter.evaluate(value);
+        result |= value.is_true();
+
+        if result {
+            break;
+        }
+    }
+
+    cond(result)
+}
+
+pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return cond(true);
+    };
+
+    let mut result = true;
+    for value in link.into_iter() {
+        let value = interpreter.evaluate(value);
+        result &= value.is_true();
+
+        if !result {
+            break;
+        }
+    }
+
+    cond(result)
+}
+
+pub fn if_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("if expects 3 arguments".into());
+    };
+
+    let cond = interpreter.evaluate(link.value);
+
+    // Errors and empty list are false, everything else is true.
+    let cond = match cond {
+        Value::List(list) => list.head.is_some(),
+        Value::Error(_) => false,
+        _ => true,
+    };
+
+    let Some(pass) = link.next else {
+        return Value::Error("if expects 3 arguments".into());
+    };
+
+    let Some(fail) = pass.next else {
+        return Value::Error("if expects 3 arguments".into());
+    };
+
+    interpreter.evaluate(if cond { pass.value } else { fail.value })
+}
+
+pub fn quote(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("quote expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("quote expects 1 argument".into());
+    }
+
+    link.value
+}
+
+pub fn list(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::default();
+    };
+
+    let mut first_link = Box::new(Link::new(interpreter.evaluate(link.value)));
+    let mut next_link: &mut Box<Link> = &mut first_link;
+
+    if let Some(next) = link.next {
+        for value in next.into_iter() {
+            let result = interpreter.evaluate(value);
+            next_link.next = Some(Box::new(Link::new(result)));
+            next_link = next_link.next.as_mut().unwrap();
+        }
+    }
+
+    Value::list(List::new(first_link))
+}
+
+pub fn car(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("car expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("car expects 1 argument".into());
+    }
+
+    let list = match link.value {
+        Value::List(list) => list,
+        _ => return Value::Error("car expects a list argument".into()),
+    };
+
+    let value = interpreter.evaluate_list(list);
+
+    let list = match value {
+        Value::List(list) => list,
+        _ => return Value::Error("car expects a list argument".into()),
+    };
+
+    let Some(head) = list.head else {
+        return Value::List(Box::new(List::default()));
+    };
+
+    head.value
+}
+
+pub fn cdr(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("cdr expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("cdr expects 1 argument".into());
+    }
+
+    let value = interpreter.evaluate(link.value);
+    let list = match value {
+        Value::List(list) => list,
+        _ => return Value::Error("cdr expects a list argument".into()),
+    };
+
+    let Some(head) = list.head else {
+        return Value::List(Box::new(List::default()));
+    };
+
+    let Some(rest) = head.next else {
+        return Value::List(Box::new(List::default()));
+    };
+
+    Value::list(List::new(rest))
+}
+
+/// Signature:
+///
+/// (print <EXPR>)
+pub fn print(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("message expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("message expects 1 argument".into());
+    }
+
+    let value = interpreter.evaluate(link.value);
+
+    println!("{value}");
+
+    value
+}
