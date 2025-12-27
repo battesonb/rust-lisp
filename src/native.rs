@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::{FunctionValue, Link, List, Scope, Symbol, Value},
+    ast::{FunctionValue, Link, List, MacroValue, Scope, Symbol, Value},
     interpreter::Interpreter,
 };
 
@@ -230,6 +230,64 @@ pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value 
     Value::Function(FunctionValue::new(params, Box::new(List::new(body))))
 }
 
+pub fn defmacro(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("defmacro expects 2 arguments".into());
+    };
+
+    let symbol = match link.value {
+        Value::Symbol(symbol) => symbol,
+        _ => {
+            return Value::Error(format!(
+                "defmacro expects first argument to be a symbol, got: {}",
+                link.value
+            ));
+        }
+    };
+
+    let Some(link) = link.next else {
+        return Value::Error("missing parameter list".into());
+    };
+
+    let params = match link.value {
+        Value::List(list) => list,
+        _ => {
+            return Value::Error("missing parameter list".into());
+        }
+    };
+
+    fn params_to_symbols(params: Box<List>) -> Result<Vec<Symbol>, Value> {
+        params
+            .into_iter()
+            .map(|value| match value {
+                Value::Symbol(symbol) => Ok(symbol),
+                _ => Err(Value::Error(
+                    "parameter list may only contain symbols".into(),
+                )),
+            })
+            .collect::<Result<Vec<Symbol>, Value>>()
+    }
+
+    let params = match params_to_symbols(params) {
+        Ok(p) => p,
+        Err(err) => return err,
+    };
+
+    let Some(body) = link.next else {
+        return Value::Error("missing body".into());
+    };
+
+    if body.next.is_some() {
+        return Value::Error("trailing arguments after body found".into());
+    }
+
+    let value = Value::Macro(MacroValue::new(params, Box::new(List::new(body))));
+
+    interpreter.set_global_value(symbol.clone(), value);
+
+    Value::Symbol(symbol)
+}
+
 /// Signature:
 ///
 /// (apply FUNC ARGUMENT_LIST) -> VALUE
@@ -279,7 +337,7 @@ pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let arguments = arguments.into_iter().collect::<Vec<_>>();
     if arguments.len() != params.len() {
         return Value::Error(format!(
-            "param count {} does not match argument count {}",
+            "function param count {} does not match argument count {}",
             params.len(),
             arguments.len()
         ));
@@ -327,7 +385,8 @@ pub fn setq(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         Value::Symbol(symbol) => symbol,
         _ => {
             return Value::Error(format!(
-                "setq expects first argument to be a symbol, got: {}", link.value
+                "setq expects first argument to be a symbol, got: {}",
+                link.value
             ));
         }
     };
@@ -522,18 +581,13 @@ pub fn list(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         return Value::default();
     };
 
-    let mut first_link = Box::new(Link::new(interpreter.evaluate(link.value)));
-    let mut next_link: &mut Box<Link> = &mut first_link;
+    let values = link.into_iter().map(|value| interpreter.evaluate(value));
 
-    if let Some(next) = link.next {
-        for value in next.into_iter() {
-            let result = interpreter.evaluate(value);
-            next_link.next = Some(Box::new(Link::new(result)));
-            next_link = next_link.next.as_mut().unwrap();
-        }
-    }
+    let Some(link) = Value::join(values) else {
+        return Value::default();
+    };
 
-    Value::list(List::new(first_link))
+    Value::list(List::new(link))
 }
 
 /// Signature:

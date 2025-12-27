@@ -42,3 +42,16 @@ fn greater_than() {
     );
     cmd.assert().success().stdout("()\n()\nt\n");
 }
+
+#[test]
+fn defun_can_define_a_function() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (defun double (x) (+ x x))
+    (print (double 5))
+    "#,
+    );
+    cmd.assert().success().stdout("10\n");
+}

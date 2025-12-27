@@ -7,3 +7,7 @@
 (setq >= (lambda (a b) (not (< a b))))
 (setq > (lambda (a b) (not (or (< a b) (= a b)))))
 (setq <= (lambda (a b) (or (< a b) (= a b))))
+
+; Add function definition macro
+(defmacro defun (name params body)
+  (setq name (lambda params body)))

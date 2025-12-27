@@ -212,3 +212,16 @@ fn it_can_define_and_call_a_function_directly() {
     );
     cmd.assert().success().stdout("20\n");
 }
+
+#[test]
+fn macro_can_create_and_expand_a_macro() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (defmacro printplustwo (a) (print (+ a 2)))
+    (printplustwo 5)
+    "#,
+    );
+    cmd.assert().success().stdout("7\n");
+}

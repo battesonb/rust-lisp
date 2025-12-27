@@ -1,11 +1,11 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    ast::{Link, List, Scope, Symbol, Value},
+    ast::{Link, List, MacroValue, Scope, Symbol, Value},
     lexer::Lexer,
     native::{
-        add, and, apply, car, cdr, div, equal, error, eval, if_native, lambda, less, list, mul, or,
-        print, progn, quote, setq, sub,
+        add, and, apply, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less,
+        list, mul, or, print, progn, quote, setq, sub,
     },
     parser::Parser,
 };
@@ -53,9 +53,78 @@ impl Interpreter {
                     )))))),
                 ))),
             ),
+            Value::Macro(MacroValue { params, body }) => self.evaluate_macro(next, params, body),
             _ => Value::Error(format!(
                 "Expected list to start with symbol (function name), received: {value}"
             )),
+        }
+    }
+
+    /// First expands a macro into a value and then evaluates it.
+    fn evaluate_macro(
+        &mut self,
+        next: Option<Box<Link>>,
+        params: Vec<Symbol>,
+        body: Box<List>,
+    ) -> Value {
+        let Some(next) = next else {
+            return Value::Error("macro expects 3 arguments".to_string());
+        };
+
+        // validate & prepare
+        let arguments = next.into_iter().map(|value| value).collect::<Vec<_>>();
+        if arguments.len() != params.len() {
+            return Value::Error(format!(
+                "macro param count {} does not match argument count {}",
+                params.len(),
+                arguments.len()
+            ));
+        }
+
+        let mut param_map = HashMap::new();
+        for (param, argument) in params.into_iter().zip(arguments) {
+            param_map.insert(param, argument);
+        }
+
+        let Some(body) = body.head else {
+            return Value::Error("macro expects 3 arguments".to_string());
+        };
+
+        if body.next.is_some() {
+            return Value::Error("macro expects 3 arguments".into());
+        }
+
+        // expand
+        // FIXME: We should only take the first body VALUE, as macros should expect a single list
+        // argument. Beyond that, they should recurse as values, too.
+        let expanded = self.expand_macro(&param_map, body.value);
+
+        // evaluate
+        self.evaluate(expanded)
+    }
+
+    fn expand_macro(&mut self, param_map: &HashMap<Symbol, Value>, value: Value) -> Value {
+        match value {
+            Value::List(list) => {
+                let Some(link) = list.head else {
+                    return Value::default();
+                };
+
+                let links = Value::join(
+                    link.into_iter()
+                        .map(|value| self.expand_macro(param_map, value)),
+                );
+
+                Value::List(Box::new(List::new_option(links)))
+            }
+            Value::Symbol(symbol) => {
+                if let Some(value) = param_map.get(&symbol) {
+                    value.clone()
+                } else {
+                    Value::Symbol(symbol)
+                }
+            }
+            _ => value,
         }
     }
 
@@ -79,6 +148,7 @@ impl Interpreter {
             "list" => list(self, links),
             "progn" => progn(self, links),
             "setq" => setq(self, links),
+            "defmacro" => defmacro(self, links),
             "quote" => quote(self, links),
             "print" => print(self, links),
             _ => Value::Error(format!("Unresolved function {function}")),

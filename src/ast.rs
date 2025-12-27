@@ -85,6 +85,25 @@ impl Link {
     pub fn iter(link: &Box<Self>) -> LinkIter<'_> {
         LinkIter { link: Some(link) }
     }
+
+    pub fn join<T>(links: T) -> Option<Box<Link>>
+    where
+        T: IntoIterator<Item = Box<Link>>,
+    {
+        let mut links = links.into_iter();
+        let Some(mut first_link) = links.next() else {
+            return None;
+        };
+
+        let mut last_link: &mut Box<Link> = &mut first_link;
+
+        while let Some(next) = links.next() {
+            last_link.next = Some(next);
+            last_link = last_link.next.as_mut().unwrap();
+        }
+
+        Some(first_link)
+    }
 }
 
 impl IntoIterator for Box<Link> {
@@ -159,6 +178,7 @@ pub enum Value {
     Float(f64),
     Error(String),
     Function(FunctionValue),
+    Macro(MacroValue),
 }
 
 impl Value {
@@ -176,6 +196,14 @@ impl Value {
             Value::Error(_) => false,
             _ => true,
         }
+    }
+
+    pub fn join<T>(iterator: T) -> Option<Box<Link>>
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        let links = iterator.into_iter().map(|value| Box::new(Link::new(value)));
+        Link::join(links)
     }
 }
 
@@ -196,10 +224,19 @@ impl Display for Value {
             Value::Integer(value) => write!(f, "{value}"),
             Value::Float(value) => write!(f, "{value}"),
             Value::Error(message) => write!(f, "<ERROR:\n{message}>"),
-            // Value::Function(_) => write!(f, "<FUNCTION>"),
             Value::Function(FunctionValue { params, body, .. }) => write!(
                 f,
                 "<FUNCTION ({}) {}>",
+                params
+                    .iter()
+                    .map(Symbol::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                body
+            ),
+            Value::Macro(MacroValue { params, body }) => write!(
+                f,
+                "<MACRO ({}) {}>",
                 params
                     .iter()
                     .map(Symbol::as_str)
@@ -242,6 +279,18 @@ impl Scope {
 
     pub fn get(&self, key: &Symbol) -> Option<&Value> {
         self.map.get(key)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MacroValue {
+    pub params: Vec<Symbol>,
+    pub body: Box<List>,
+}
+
+impl MacroValue {
+    pub fn new(params: Vec<Symbol>, body: Box<List>) -> Self {
+        Self { params, body }
     }
 }
 
