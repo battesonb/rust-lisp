@@ -5,6 +5,11 @@ use crate::{
     interpreter::Interpreter,
 };
 
+/// Signature:
+///
+/// (+ (&rest operands))
+///
+/// add always returns the value of 0 (the identity) multiplied by all operands.
 pub fn add(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
     let mut total = 0;
 
@@ -29,6 +34,11 @@ pub fn add(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
     return Value::Integer(total);
 }
 
+/// Signature:
+///
+/// (* (&rest operands))
+///
+/// Mul always returns the value of 1 (the identity) multiplied by all operands.
 pub fn mul(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
     let mut total = 1;
 
@@ -53,6 +63,12 @@ pub fn mul(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
     return Value::Integer(total);
 }
 
+/// Signature:
+///
+/// (/ (base &rest operands))
+///
+/// Sub functions as a unary negation with one parameter. If there are any other operands, it will
+/// instead perform consecutive subtraction on the first parameter.
 pub fn sub(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
     let Some(first) = link else {
         return Value::Error("- expects at least 1 argument".into());
@@ -93,9 +109,16 @@ pub fn sub(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
     return Value::Integer(total);
 }
 
+/// Signature:
+///
+/// (/ (base &rest operands))
+///
 /// Example:
 ///
 /// (/ 5 2)
+///
+/// Div functions as a reciprocal with one parameter. If there are any other operands, it will
+/// instead perform consecutive division on the first parameter.
 pub fn div(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
     let Some(first) = link else {
         return Value::Error("/ expects at least 1 argument".into());
@@ -153,10 +176,18 @@ pub fn error(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     Value::Error(link.value.to_string())
 }
 
+// Signature:
+//
+// (lambda PARAM_LIST BODY) -> FUNCTION
+//
 // Example:
 //
 // (lambda (a b) (+ a b))
 // > <FUNCTION>
+//
+// Lambda is special in a few ways, firstly it returns a special (opaque) function value. Secondly,
+// its second parameter, the parameter list, is never evaluated as code. It is treated as a list,
+// always.
 pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("missing parameter list".into());
@@ -197,10 +228,17 @@ pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value 
     Value::Function(FunctionValue::new(params, Box::new(List::new(body))))
 }
 
+/// Signature:
+///
+/// (apply FUNC ARGUMENT_LIST) -> VALUE
+///
 /// Example:
 ///
 /// (apply (lambda (a b) (+ a b)) (5 2))
 /// > 7
+///
+/// Apply is at the heart of the interpreter. It takes in a list with an expected format and
+/// executes the function.
 pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         // TODO: Support providing a symbol which represents the native function as input
@@ -271,17 +309,22 @@ pub fn progn(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     result
 }
 
+/// Signature:
+///
+/// (setq (SYMBOL EXPR)) -> VALUE
+///
+/// Setq sets the result of the EXPR to SYMBOL and also returns it. It is special in that it does
+/// not evaluate the first parameter as an expression.
 pub fn setq(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("setq expects 2 arguments".into());
     };
 
-    let value = interpreter.evaluate(link.value);
-    let symbol = match value {
+    let symbol = match link.value {
         Value::Symbol(symbol) => symbol,
         _ => {
             return Value::Error(format!(
-                "setq expects first argument to be a symbol, got: {value}"
+                "setq expects first argument to be a symbol, got: {}", link.value
             ));
         }
     };
@@ -297,6 +340,11 @@ pub fn setq(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     Value::Symbol(symbol)
 }
 
+/// Signature:
+///
+/// (eval LIST) -> VALUE
+///
+/// Eval evaluates a provided list as an expression. This allows data to be evaluated as code.
 pub fn eval(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("eval expects 1 argument".into());
@@ -368,6 +416,12 @@ pub fn less(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     cond(result)
 }
 
+/// Signature:
+///
+/// (or (&rest exprs)) -> t | ()
+///
+/// Both `and` and `or` are also short-circuiting native methods. It might be possible to implement
+/// these without a native implementation for both, but leaving for now.
 pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return cond(true);
@@ -386,6 +440,12 @@ pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     cond(result)
 }
 
+/// Signature:
+///
+/// (and (&rest exprs)) -> t | ()
+///
+/// Both `and` and `or` are also short-circuiting native methods. It might be possible to implement
+/// these without a native implementation for both, but leaving for now.
 pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return cond(true);
@@ -404,6 +464,11 @@ pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     cond(result)
 }
 
+/// Signature:
+///
+/// (if <COND_EXPR> <TRUE_EXPR> <FALSE_EXPR>) -> <TRUE_EXPR>
+///
+/// If is special in that it "short-circuits" the evaluation only to the branch that is followed.
 pub fn if_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("if expects 3 arguments".into());
@@ -429,6 +494,11 @@ pub fn if_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Valu
     interpreter.evaluate(if cond { pass.value } else { fail.value })
 }
 
+/// Signature:
+///
+/// (quote (value)) -> value
+///
+/// Quote is special in that does not evaluate its argument. It returns it as-is, as data.
 pub fn quote(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("quote expects 1 argument".into());
@@ -441,6 +511,9 @@ pub fn quote(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     link.value
 }
 
+/// Signature:
+///
+/// (cdr <EXPR>) -> LIST
 pub fn list(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::default();
@@ -460,6 +533,9 @@ pub fn list(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     Value::list(List::new(first_link))
 }
 
+/// Signature:
+///
+/// (cdr <EXPR>) -> LIST
 pub fn car(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("car expects 1 argument".into());
@@ -488,6 +564,9 @@ pub fn car(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     head.value
 }
 
+/// Signature
+///
+/// (cdr <EXPR>) -> <VALUE>
 pub fn cdr(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("cdr expects 1 argument".into());
@@ -516,7 +595,7 @@ pub fn cdr(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 
 /// Signature:
 ///
-/// (print <EXPR>)
+/// (print <EXPR>) -> <VALUE>
 pub fn print(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("message expects 1 argument".into());

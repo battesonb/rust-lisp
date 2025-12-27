@@ -59,6 +59,9 @@ impl Display for List {
     }
 }
 
+/// In a regular lisp, the next value could technically be any value Lisp value, not just a link.
+/// Another way of thinking of this is that a linked list should terminate in a link to an empty
+/// linked list (indicating `nil`). For now, we'll leave this as-is.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Link {
     pub value: Value,
@@ -208,6 +211,8 @@ impl Display for Value {
     }
 }
 
+/// TODO: Support this as an enum of lisp functions and native functions, so that both can be
+/// referenced in code as values.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionValue {
     pub scope: Rc<RefCell<Scope>>,
