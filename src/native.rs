@@ -74,10 +74,11 @@ pub fn sub(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
         return Value::Error("- expects at least 1 argument".into());
     };
 
-    let mut total = match first.value {
+    let value = interpreter.evaluate(first.value);
+    let mut total = match value {
         Value::Integer(value) => value,
         _ => {
-            return Value::Error(format!("Expected integer, received: {}", first.value));
+            return Value::Error(format!("Expected integer, received: {}", value));
         }
     };
 
@@ -124,11 +125,12 @@ pub fn div(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
         return Value::Error("/ expects at least 1 argument".into());
     };
 
-    let mut total: f64 = match first.value {
+    let value = interpreter.evaluate(first.value);
+    let mut total: f64 = match value {
         Value::Integer(value) => value as f64,
         Value::Float(value) => value as f64,
         _ => {
-            return Value::Error(format!("Expected number, received: {}", first.value));
+            return Value::Error(format!("Expected number, received: {}", value));
         }
     };
 
@@ -248,6 +250,7 @@ pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let value = interpreter.evaluate(link.value);
 
     let FunctionValue {
+        // TBD: Do we ever need this scope, or are we currying incorrectly?
         scope,
         params,
         body,
