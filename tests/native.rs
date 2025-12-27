@@ -159,6 +159,20 @@ fn eval_works() {
 }
 
 #[test]
+fn less_than() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (< 5 6))
+    (print (< 6 6))
+    (print (< 7 6))
+    "#,
+    );
+    cmd.assert().success().stdout("t\n()\n()\n");
+}
+
+#[test]
 fn it_can_define_and_apply_a_function() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 

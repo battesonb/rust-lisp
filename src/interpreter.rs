@@ -4,8 +4,8 @@ use crate::{
     ast::{Link, List, Scope, Symbol, Value},
     lexer::Lexer,
     native::{
-        add, and, apply, car, cdr, div, equal, error, eval, if_native, lambda, less, list, print,
-        more, mul, not, or, progn, quote, setq, sub,
+        add, and, apply, car, cdr, div, equal, error, eval, if_native, lambda, less, list, mul, or,
+        print, progn, quote, setq, sub,
     },
     parser::Parser,
 };
@@ -67,8 +67,6 @@ impl Interpreter {
             "/" => div(self, links),
             "=" => equal(self, links),
             "<" => less(self, links),
-            ">" => more(self, links),
-            "not" => not(self, links),
             "and" => and(self, links),
             "or" => or(self, links),
             "apply" => apply(self, links),

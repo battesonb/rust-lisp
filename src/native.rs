@@ -1,5 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
-    ast::{FunctionValue, Link, List, Symbol, Value},
+    ast::{FunctionValue, Link, List, Scope, Symbol, Value},
     interpreter::Interpreter,
 };
 
@@ -242,6 +244,7 @@ pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         ));
     }
 
+    let scope = Rc::new(RefCell::new(Scope::default()));
     {
         let mut scope = scope.borrow_mut();
         for (key, value) in params.into_iter().zip(arguments) {
@@ -363,46 +366,6 @@ pub fn less(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     };
 
     cond(result)
-}
-
-pub fn more(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("equal expects 2 arguments".into());
-    };
-
-    let a = interpreter.evaluate(link.value);
-
-    let Some(link) = link.next else {
-        return Value::Error("equal expects 2 arguments".into());
-    };
-
-    let b = interpreter.evaluate(link.value);
-
-    let result = match (a, b) {
-        (Value::Integer(a), Value::Integer(b)) => a > b,
-        (Value::Float(a), Value::Float(b)) => a > b,
-        (Value::Integer(a), Value::Float(b)) => (a as f64) > b,
-        (Value::Float(a), Value::Integer(b)) => a > (b as f64),
-        _ => {
-            return Value::Error("Can't compare these two values".into());
-        }
-    };
-
-    cond(result)
-}
-
-pub fn not(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("not expects 1 argument".into());
-    };
-
-    if link.next.is_some() {
-        return Value::Error("not expects 1 argument".into());
-    }
-
-    let value = interpreter.evaluate(link.value);
-
-    cond(!value.is_true())
 }
 
 pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
