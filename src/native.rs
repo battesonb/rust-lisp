@@ -368,34 +368,46 @@ pub fn progn(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 
 /// Signature:
 ///
-/// (setq (SYMBOL EXPR)) -> VALUE
+/// (setq (&rest pairs)) -> VALUE
 ///
-/// Setq (or "set quoted") sets the result of the EXPR to SYMBOL and also returns it. It is a
-/// special operator in that it does not evaluate the first parameter as an expression.
-pub fn setq(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("setq expects 2 arguments".into());
-    };
+/// Example
+///
+/// (setq a 25 b 20)
+/// > 20
+///
+/// Setq (or "set quoted") sets the result of the expression for each pair to the symbol preceding
+/// it. in each pair. It is a special operator in that it does not evaluate the first parameter of
+/// each pair as an expression.
+pub fn setq(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
+    let mut last_value = None;
+    loop {
+        let Some(current_link) = link else {
+            break;
+        };
 
-    let symbol = match link.value {
-        Value::Symbol(symbol) => symbol,
-        _ => {
-            return Value::Error(format!(
-                "setq expects first argument to be a symbol, got: {}",
-                link.value
-            ));
-        }
-    };
+        let symbol = match current_link.value {
+            Value::Symbol(symbol) => symbol,
+            _ => {
+                return Value::Error(format!(
+                    "setq expects first argument of pair to be a symbol, got: {}",
+                    current_link.value
+                ));
+            }
+        };
 
-    let Some(link) = link.next else {
-        return Value::Error("setq expects 2 arguments".into());
-    };
+        let Some(current_link) = current_link.next else {
+            return Value::Error("setq expects pairs".into());
+        };
 
-    let value = interpreter.evaluate(link.value);
+        let value = interpreter.evaluate(current_link.value);
 
-    interpreter.set_global_value(symbol.clone(), value);
+        interpreter.set_global_value(symbol.clone(), value.clone());
 
-    Value::Symbol(symbol)
+        last_value = Some(value);
+        link = current_link.next;
+    }
+
+    last_value.unwrap_or_else(Value::default)
 }
 
 /// Signature:

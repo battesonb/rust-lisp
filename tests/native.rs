@@ -114,6 +114,20 @@ fn setq_can_set_a_value_twice() {
 }
 
 #[test]
+fn setq_can_set_pairs() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (setq x 5 y 10)
+    (print x)
+    (print y)
+    "#,
+    );
+    cmd.assert().success().stdout("5\n10\n");
+}
+
+#[test]
 fn car_returns_head_of_list() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 
