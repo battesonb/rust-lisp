@@ -187,10 +187,19 @@ impl Interpreter {
         scope.insert(symbol, value);
     }
 
+    pub(crate) fn active_scope(&mut self) -> Rc<RefCell<Scope>> {
+        self
+            .scopes
+            .last()
+            .expect("It should never be possible to pop the root scope")
+            .clone()
+    }
+
     pub(crate) fn pop_scope(&mut self) -> Scope {
-        let Some(result) = self.scopes.pop() else {
-            panic!("It should never be possible to pop the root scope");
-        };
+        let result = self
+            .scopes
+            .pop()
+            .expect("It should never be possible to pop the root scope");
         result.take()
     }
 

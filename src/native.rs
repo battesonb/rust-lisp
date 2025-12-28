@@ -180,7 +180,7 @@ pub fn error(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 
 // Signature:
 //
-// (lambda PARAM_LIST BODY) -> FUNCTION
+// (lambda (PARAM_LIST &rest body)) -> FUNCTION
 //
 // Example:
 //
@@ -220,12 +220,8 @@ pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value 
     };
 
     let Some(body) = link.next else {
-        return Value::Error("missing body".into());
+        return Value::Error("lambda is missing body".into());
     };
-
-    if body.next.is_some() {
-        return Value::Error("trailing arguments after body found".into());
-    }
 
     Value::Function(FunctionValue::new(params, Box::new(List::new(body))))
 }
@@ -308,7 +304,7 @@ pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let value = interpreter.evaluate(link.value);
 
     let FunctionValue {
-        // TBD: Do we ever need this scope, or are we currying incorrectly?
+        // TBD: Do we ever need this scope, or are we doing closures incorrectly?
         scope,
         params,
         body,
@@ -374,8 +370,8 @@ pub fn progn(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 ///
 /// (setq (SYMBOL EXPR)) -> VALUE
 ///
-/// Setq sets the result of the EXPR to SYMBOL and also returns it. It is special in that it does
-/// not evaluate the first parameter as an expression.
+/// Setq (or "set quoted") sets the result of the EXPR to SYMBOL and also returns it. It is a
+/// special operator in that it does not evaluate the first parameter as an expression.
 pub fn setq(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("setq expects 2 arguments".into());

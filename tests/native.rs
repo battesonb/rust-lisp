@@ -188,7 +188,7 @@ fn less_than() {
 }
 
 #[test]
-fn it_can_define_and_apply_a_function() {
+fn lambda_can_be_defined_and_applied() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 
     cmd.write_stdin(
@@ -201,7 +201,7 @@ fn it_can_define_and_apply_a_function() {
 }
 
 #[test]
-fn it_can_define_and_call_a_function_directly() {
+fn lambda_can_be_defined_and_called_directly() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 
     cmd.write_stdin(
@@ -211,6 +211,19 @@ fn it_can_define_and_call_a_function_directly() {
     "#,
     );
     cmd.assert().success().stdout("20\n");
+}
+
+#[test]
+fn lambda_body_is_rest_arguments() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (setq print_both (lambda (a b) (print a) (print b)))
+    (print_both 5 10)
+    "#,
+    );
+    cmd.assert().success().stdout("5\n10\n");
 }
 
 #[test]
