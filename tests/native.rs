@@ -252,3 +252,15 @@ fn macro_can_create_and_expand_a_macro() {
     );
     cmd.assert().success().stdout("7\n");
 }
+
+#[test]
+fn macroexpand_can_expand_a_macro_and_print_it() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (macroexpand (defun x () (print wow)))
+    "#,
+    );
+    cmd.assert().success().stdout("((setq x (lambda () (print wow))))\n");
+}

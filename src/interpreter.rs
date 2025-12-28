@@ -4,8 +4,7 @@ use crate::{
     ast::{Link, List, MacroValue, Scope, Symbol, Value},
     lexer::Lexer,
     native::{
-        add, and, apply, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less,
-        list, mul, or, print, progn, quote, setq, sub,
+        add, and, apply, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less, list, macroexpand, mul, or, print, progn, quote, setq, sub
     },
     parser::Parser,
 };
@@ -94,16 +93,13 @@ impl Interpreter {
             return Value::Error("macro expects 3 arguments".into());
         }
 
-        // expand
-        // FIXME: We should only take the first body VALUE, as macros should expect a single list
-        // argument. Beyond that, they should recurse as values, too.
         let expanded = self.expand_macro(&param_map, body.value);
 
         // evaluate
         self.evaluate(expanded)
     }
 
-    fn expand_macro(&mut self, param_map: &HashMap<Symbol, Value>, value: Value) -> Value {
+    pub(crate) fn expand_macro(&mut self, param_map: &HashMap<Symbol, Value>, value: Value) -> Value {
         match value {
             Value::List(list) => {
                 let Some(link) = list.head else {
@@ -149,6 +145,7 @@ impl Interpreter {
             "progn" => progn(self, links),
             "setq" => setq(self, links),
             "defmacro" => defmacro(self, links),
+            "macroexpand" => macroexpand(self, links),
             "quote" => quote(self, links),
             "print" => print(self, links),
             _ => Value::Error(format!("Unresolved function {function}")),

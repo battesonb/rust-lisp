@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{FunctionValue, Link, List, MacroValue, Scope, Symbol, Value},
@@ -226,6 +226,92 @@ pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value 
     Value::Function(FunctionValue::new(params, Box::new(List::new(body))))
 }
 
+/// Signature:
+///
+/// (macroexpand LIST) -> NIL
+///
+/// Example:
+///
+/// (macroexpand
+///   (defun x ()
+///     (print amazing)))
+///
+/// Expands a given macro into the form(s) that it would produce before evaluation. No need to
+/// quote, as the input is treated as quoted by default.
+pub fn macroexpand(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("macroexpand expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("macroexpand expects 1 argument".into());
+    }
+
+    let link = match link.value {
+        Value::List(list) => list.head,
+        _ => {
+            return Value::Error(format!(
+                "macro expects argument to be a list, got: {}",
+                link.value
+            ));
+        }
+    };
+
+    let Some(link) = link else {
+        return Value::Error("missing macro name in parameter list".into());
+    };
+
+    let macro_name = match link.value {
+        Value::Symbol(ref symbol) => symbol,
+        _ => {
+            return Value::Error(format!(
+                "macro name in parameter list must be a symbol, got: {}",
+                link.value
+            ));
+        }
+    };
+
+    let macro_value = interpreter.read_value(&macro_name);
+
+    let Some(macro_value) = macro_value else {
+        return Value::Error(format!("no macro named '{}' found", macro_name));
+    };
+
+    let MacroValue { params, body } = match macro_value {
+        Value::Macro(macro_value) => macro_value,
+        _ => {
+            return Value::Error(format!("macro expected, got: {}", link.value));
+        }
+    };
+
+    let arguments = if let Some(next) = link.next {
+        next.into_iter().map(|value| value).collect::<Vec<_>>()
+    } else {
+        Vec::default()
+    };
+
+    if arguments.len() != params.len() {
+        return Value::Error(format!(
+            "macro param count {} does not match argument count {}",
+            params.len(),
+            arguments.len()
+        ));
+    }
+
+    let mut param_map = HashMap::new();
+    for (param, argument) in params.into_iter().zip(arguments) {
+        param_map.insert(param, argument);
+    }
+
+    let expanded = interpreter.expand_macro(&param_map, Value::List(body));
+
+    println!("{expanded}");
+
+    Value::default()
+}
+
+/// Defines a macro, which just expands the provided symbols as-is into other values which are then
+/// evaluated. See `macroexpand` to see this expansion as it is before evaluation.
 pub fn defmacro(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("defmacro expects 2 arguments".into());
