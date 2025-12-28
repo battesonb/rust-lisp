@@ -188,9 +188,9 @@ pub fn error(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 // > <FUNCTION>
 //
 // Lambda is special in a few ways, firstly it returns a special (opaque) function value. Secondly,
-// its second parameter, the parameter list, is never evaluated as code. It is treated as a list,
-// always.
-pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+// its first parameter, the parameter list, is never evaluated as code. It is treated as a list,
+// always. The body is only evaluated when called, otherwise it is treated as a quoted list.
+pub fn lambda(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("missing parameter list".into());
     };
@@ -223,7 +223,8 @@ pub fn lambda(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value 
         return Value::Error("lambda is missing body".into());
     };
 
-    Value::Function(FunctionValue::new(params, Box::new(List::new(body))))
+    let scope = interpreter.active_scope();
+    Value::Function(FunctionValue::new(scope, params, Box::new(List::new(body))))
 }
 
 /// Signature:
@@ -365,7 +366,7 @@ pub fn defmacro(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value
 
     let value = Value::Macro(MacroValue::new(params, Box::new(List::new(body))));
 
-    interpreter.set_global_value(symbol.clone(), value);
+    interpreter.set_value(symbol.clone(), value);
 
     Value::Symbol(symbol)
 }
@@ -390,8 +391,7 @@ pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let value = interpreter.evaluate(link.value);
 
     let FunctionValue {
-        // TBD: Do we ever need this scope, or are we doing closures incorrectly?
-        scope,
+        parent_scope,
         params,
         body,
     } = match value {
@@ -425,20 +425,24 @@ pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         ));
     }
 
-    let scope = Rc::new(RefCell::new(Scope::default()));
+    let scope = Rc::new(RefCell::new(Box::new(Scope::new(Some(parent_scope)))));
     {
         let mut scope = scope.borrow_mut();
         for (key, value) in params.into_iter().zip(arguments) {
             scope.insert(key, value);
         }
     }
-    interpreter.push_scope(scope);
+    interpreter.push_active_scope(scope);
     let result = progn(interpreter, body.head);
-    interpreter.pop_scope();
+    interpreter.pop_active_scope();
 
     result
 }
 
+/// Signature
+/// (progn (&rest EXPRS)) -> VALUE
+///
+/// Evaluates each expression and returns the value returned by the last expression.
 pub fn progn(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::default();
@@ -487,7 +491,7 @@ pub fn setq(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value
 
         let value = interpreter.evaluate(current_link.value);
 
-        interpreter.set_global_value(symbol.clone(), value.clone());
+        interpreter.set_value(symbol.clone(), value.clone());
 
         last_value = Some(value);
         link = current_link.next;

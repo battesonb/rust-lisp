@@ -4,19 +4,21 @@ use crate::{
     ast::{Link, List, MacroValue, Scope, Symbol, Value},
     lexer::Lexer,
     native::{
-        add, and, apply, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less, list, macroexpand, mul, or, print, progn, quote, setq, sub
+        add, and, apply, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less,
+        list, macroexpand, mul, or, print, progn, quote, setq, sub,
     },
     parser::Parser,
 };
 
 pub struct Interpreter {
-    scopes: Vec<Rc<RefCell<Scope>>>,
+    active_scope_stack: Vec<Rc<RefCell<Box<Scope>>>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
+        let root_scope = Rc::new(RefCell::new(Box::new(Scope::default())));
         Self {
-            scopes: vec![Rc::new(RefCell::new(Scope::default()))],
+            active_scope_stack: vec![root_scope],
         }
     }
 
@@ -99,7 +101,11 @@ impl Interpreter {
         self.evaluate(expanded)
     }
 
-    pub(crate) fn expand_macro(&mut self, param_map: &HashMap<Symbol, Value>, value: Value) -> Value {
+    pub(crate) fn expand_macro(
+        &mut self,
+        param_map: &HashMap<Symbol, Value>,
+        value: Value,
+    ) -> Value {
         match value {
             Value::List(list) => {
                 let Some(link) = list.head else {
@@ -153,11 +159,14 @@ impl Interpreter {
     }
 
     pub(crate) fn read_value(&self, symbol: &Symbol) -> Option<Value> {
-        for scope in self.scopes.iter().rev() {
+        let mut current_scope = Some(self.active_scope());
+
+        while let Some(scope) = current_scope {
             let scope = scope.borrow();
             if let Some(value) = scope.get(symbol) {
                 return Some(value.clone()); // Huge footgun, this should not be cloned...
             }
+            current_scope = scope.parent_scope();
         }
 
         None
@@ -175,32 +184,47 @@ impl Interpreter {
         }
     }
 
+    pub(crate) fn set_value(&mut self, symbol: Symbol, value: Value) {
+        let mut current_scope = Some(self.active_scope());
+
+        while let Some(scope) = current_scope {
+            let mut scope = scope.borrow_mut();
+            if scope.get(&symbol).is_some() {
+                scope.insert(symbol, value);
+                return;
+            }
+            current_scope = scope.parent_scope();
+        }
+
+        self.set_global_value(symbol, value);
+    }
+
     pub(crate) fn set_global_value(&mut self, symbol: Symbol, value: Value) {
         let scope = self
-            .scopes
-            .first_mut()
+            .active_scope_stack
+            .first()
             .expect("There should always be at least one scope");
         let mut scope = scope.borrow_mut();
         scope.insert(symbol, value);
     }
 
-    pub(crate) fn active_scope(&mut self) -> Rc<RefCell<Scope>> {
-        self
-            .scopes
+    /// Returns the closest scope to the active form/expression.
+    pub(crate) fn active_scope(&self) -> Rc<RefCell<Box<Scope>>> {
+        self.active_scope_stack
             .last()
             .expect("It should never be possible to pop the root scope")
             .clone()
     }
 
-    pub(crate) fn pop_scope(&mut self) -> Scope {
+    pub(crate) fn pop_active_scope(&mut self) -> Rc<RefCell<Box<Scope>>> {
         let result = self
-            .scopes
+            .active_scope_stack
             .pop()
-            .expect("It should never be possible to pop the root scope");
-        result.take()
+            .expect("It should never be possible to pop the root active scope");
+        result
     }
 
-    pub(crate) fn push_scope(&mut self, scope: Rc<RefCell<Scope>>) {
-        self.scopes.push(scope);
+    pub(crate) fn push_active_scope(&mut self, scope: Rc<RefCell<Box<Scope>>>) {
+        self.active_scope_stack.push(scope);
     }
 }
