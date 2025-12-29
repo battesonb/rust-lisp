@@ -5,7 +5,7 @@ use crate::{
     lexer::Lexer,
     native::{
         add, and, apply, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less,
-        list, macroexpand, mul, or, print, progn, quote, setq, sub,
+        let_native, list, macroexpand, mul, or, print, progn, quote, setq, sub,
     },
     parser::Parser,
 };
@@ -147,6 +147,7 @@ impl Interpreter {
             "eval" => eval(self, links),
             "if" => if_native(self, links),
             "lambda" => lambda(self, links),
+            "let" => let_native(self, links),
             "list" => list(self, links),
             "progn" => progn(self, links),
             "setq" => setq(self, links),

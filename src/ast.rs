@@ -4,7 +4,6 @@ use std::{
     collections::HashMap,
     fmt::{Display, Write},
     rc::Rc,
-    sync::atomic::AtomicUsize,
 };
 
 #[derive(Clone, Debug, Default, PartialEq)]

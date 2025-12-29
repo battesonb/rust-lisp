@@ -491,7 +491,7 @@ pub fn setq(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value
 
         let value = interpreter.evaluate(current_link.value);
 
-        interpreter.set_value(symbol.clone(), value.clone());
+        interpreter.set_value(symbol, value.clone());
 
         last_value = Some(value);
         link = current_link.next;
@@ -547,6 +547,9 @@ pub fn equal(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 
     let b = interpreter.evaluate(link.value);
 
+    // TODO:
+    // 1. Cast integers into floats if types are cross-compared.
+    // 2. Generally improve this check. Equals on function definitions overflows the stack.
     cond(a.eq(&b))
 }
 
@@ -765,4 +768,74 @@ pub fn print(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     println!("{value}");
 
     value
+}
+
+pub fn let_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("let expects 2 arguments".into());
+    };
+
+    let variable_list = match link.value {
+        Value::List(list) => list,
+        _ => {
+            return Value::Error("first argument of let 2 must be a list".into());
+        }
+    };
+
+    let rest = link.next;
+
+    let scope = Rc::new(RefCell::new(Box::new(Scope::new(Some(
+        interpreter.active_scope(),
+    )))));
+    {
+        let mut scope = scope.borrow_mut();
+        let mut link = variable_list.head;
+        loop {
+            let Some(current_link) = link else {
+                break;
+            };
+
+            let pair = match current_link.value {
+                Value::List(list) => list.head,
+                _ => {
+                    return Value::Error(format!(
+                        "let expects variables specified as a list of lists pairs, got: {}",
+                        current_link.value
+                    ));
+                }
+            };
+
+            let Some(pair) = pair else {
+                return Value::Error(
+                    "let encountered empty list for variable specification".into(),
+                );
+            };
+
+            let symbol = match pair.value {
+                Value::Symbol(symbol) => symbol,
+                _ => {
+                    return Value::Error(format!(
+                        "let expects first argument of pair to be a symbol, got: {}",
+                        pair.value
+                    ));
+                }
+            };
+
+            let Some(pair) = pair.next else {
+                return Value::Error("let expects pairs".into());
+            };
+
+            let value = interpreter.evaluate(pair.value);
+
+            scope.insert(symbol, value);
+
+            link = current_link.next;
+        }
+    }
+
+    interpreter.push_active_scope(scope);
+    let result = progn(interpreter, rest);
+    interpreter.pop_active_scope();
+
+    result
 }

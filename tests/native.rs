@@ -262,5 +262,21 @@ fn macroexpand_can_expand_a_macro_and_print_it() {
     (macroexpand (defun x () (print wow)))
     "#,
     );
-    cmd.assert().success().stdout("((setq x (lambda () (print wow))))\n");
+    cmd.assert()
+        .success()
+        .stdout("((setq x (lambda () (print wow))))\n");
+}
+
+#[test]
+fn let_can_bind_a_variable() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (let ((a 1) (b 2)) (print (+ a b)))
+    (print a) ; confirm global a is untouched
+    (print b) ; confirm global b is untouched
+    "#,
+    );
+    cmd.assert().success().stdout("3\na\nb\n");
 }

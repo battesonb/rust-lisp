@@ -6,12 +6,12 @@ fn it_can_generate_stateful_functions() {
 
     cmd.write_stdin(
         r#"
-    (defun make-accumulator (acc)
-        (lambda (inc)
+    (defun make-accumulator ()
+        (let ((acc 0)) (lambda (inc)
             (progn
                 (setq acc (+ acc inc))
-                acc)))
-    (setq accumulator (make-accumulator 0))
+                acc))))
+    (setq accumulator (make-accumulator))
     (print (accumulator 5))
     (print (accumulator 10))
     (print (accumulator 15))

@@ -6,8 +6,10 @@ use assert_cmd::cargo::*;
 fn message_can_print() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 
-    cmd.write_stdin(r#"
+    cmd.write_stdin(
+        r#"
     (print success)
-    "#);
+    "#,
+    );
     cmd.assert().success().stdout("success\n");
 }

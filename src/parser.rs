@@ -40,17 +40,17 @@ impl Parser {
                 Token::Symbol(symbol) => {
                     lists.push(Value::Symbol(Symbol::new(symbol.clone())));
                     self.tokens.next();
-                },
+                }
                 Token::RParen => {
                     return Err(ParseError::UnexpectedRParen);
-                },
+                }
             }
         }
 
         Ok(lists)
     }
 
-    pub fn parse_list(&mut self) -> Result<List, ParseError>  {
+    pub fn parse_list(&mut self) -> Result<List, ParseError> {
         let mut list = List::default();
 
         let Some(token) = self.tokens.next() else {
