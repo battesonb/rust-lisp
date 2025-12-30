@@ -1,37 +1,73 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use thiserror::Error;
+
 use crate::{
-    ast::{FunctionValue, Link, List, MacroValue, Scope, Symbol, Value},
+    ast::{
+        ConsCell, FunctionValue, MacroValue, Scope, Symbol, Value, ValueExpectError,
+        ValueExpectResult,
+    },
     interpreter::Interpreter,
 };
+
+#[derive(Clone, Debug, Error)]
+pub enum NativeError {
+    #[error(transparent)]
+    ValueExpectError(#[from] ValueExpectError),
+    #[error("Expected number, received: {0}")]
+    NumberExpected(Value),
+    #[error("Unresolved function: {0}")]
+    UnresolvedFunction(Symbol),
+    #[error("Unresolved macro: {0}")]
+    UnresolvedMacro(Symbol),
+    #[error("Undefined function: {0}")]
+    UndefinedVariable(Symbol),
+    #[error("Invalid function or macro expression, received: {0}")]
+    InvalidFunctionExpression(Value),
+    #[error("Invalid argument count for {name}, expected {expected}")]
+    InvalidExactArgumentCount { name: String, expected: usize },
+    #[error("Mismatched parameter ({params}) and argument ({arguments}) count for {name}")]
+    MismatchedArgumentAndParameterCount {
+        name: String,
+        arguments: usize,
+        params: usize,
+    },
+    #[error("{0}")]
+    Generic(String),
+}
+
+pub type NativeResult<T> = Result<T, NativeError>;
 
 /// Signature:
 ///
 /// (+ (&rest operands))
 ///
 /// add always returns the value of 0 (the identity) multiplied by all operands.
-pub fn add(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
-    let mut total = 0;
+pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+    let mut total = 0.;
 
     loop {
-        let Some(current) = link else {
+        if rest.is_nil() {
             break;
-        };
+        }
 
-        let result = interpreter.evaluate(current.value);
+        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+
+        let result = interpreter.evaluate(*value)?;
         let result = match result {
-            Value::Integer(value) => value,
-            _ => {
-                return Value::Error(format!("Expected integer, received: {result}"));
+            Value::Integer(value) => value as f64,
+            Value::Float(value) => value,
+            result => {
+                return Err(NativeError::NumberExpected(result));
             }
         };
 
         total += result;
 
-        link = current.next;
+        rest = *next;
     }
 
-    return Value::Integer(total);
+    Ok(Value::number(total))
 }
 
 /// Signature:
@@ -39,28 +75,31 @@ pub fn add(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
 /// (* (&rest operands))
 ///
 /// Mul always returns the value of 1 (the identity) multiplied by all operands.
-pub fn mul(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
-    let mut total = 1;
+pub fn mul(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+    let mut total = 1.;
 
     loop {
-        let Some(current) = link else {
+        if rest.is_nil() {
             break;
-        };
+        }
 
-        let result = interpreter.evaluate(current.value);
+        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+
+        let result = interpreter.evaluate(*value)?;
         let result = match result {
-            Value::Integer(value) => value,
-            _ => {
-                return Value::Error(format!("Expected integer, received: {result}"));
+            Value::Integer(value) => value as f64,
+            Value::Float(value) => value,
+            result => {
+                return Err(NativeError::NumberExpected(result));
             }
         };
 
         total *= result;
 
-        link = current.next;
+        rest = *next;
     }
 
-    return Value::Integer(total);
+    Ok(Value::number(total))
 }
 
 /// Signature:
@@ -69,45 +108,45 @@ pub fn mul(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
 ///
 /// Sub functions as a unary negation with one parameter. If there are any other operands, it will
 /// instead perform consecutive subtraction on the first parameter.
-pub fn sub(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
-    let Some(first) = link else {
-        return Value::Error("- expects at least 1 argument".into());
-    };
+pub fn sub(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
 
-    let value = interpreter.evaluate(first.value);
+    let value = interpreter.evaluate(*value)?;
+
     let mut total = match value {
-        Value::Integer(value) => value,
-        _ => {
-            return Value::Error(format!("Expected integer, received: {}", value));
-        }
-    };
+        Value::Integer(value) => Ok(value as f64),
+        Value::Float(value) => Ok(value),
+        result => Err(NativeError::NumberExpected(result)),
+    }?;
 
     // Single argument is a unary negation operation.
-    if first.next.is_none() {
-        return Value::Integer(-total);
+    if next.is_nil() {
+        return Ok(Value::number(-total));
     }
 
-    link = first.next;
-
+    rest = *next;
     loop {
-        let Some(current) = link else {
+        if rest.is_nil() {
             break;
         };
 
-        let result = interpreter.evaluate(current.value);
+        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+
+        let result = interpreter.evaluate(*value)?;
         let result = match result {
-            Value::Integer(value) => value,
-            _ => {
-                return Value::Error(format!("Expected integer, received: {result}"));
+            Value::Integer(value) => value as f64,
+            Value::Float(value) => value,
+            result => {
+                return Err(NativeError::NumberExpected(result));
             }
         };
 
         total -= result;
 
-        link = current.next;
+        rest = *next;
     }
 
-    return Value::Integer(total);
+    Ok(Value::number(total))
 }
 
 /// Signature:
@@ -120,64 +159,63 @@ pub fn sub(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
 ///
 /// Div functions as a reciprocal with one parameter. If there are any other operands, it will
 /// instead perform consecutive division on the first parameter.
-pub fn div(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
-    let Some(first) = link else {
-        return Value::Error("/ expects at least 1 argument".into());
-    };
+pub fn div(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
 
-    let value = interpreter.evaluate(first.value);
-    let mut total: f64 = match value {
-        Value::Integer(value) => value as f64,
-        Value::Float(value) => value as f64,
-        _ => {
-            return Value::Error(format!("Expected number, received: {}", value));
-        }
-    };
+    let value = interpreter.evaluate(*value)?;
 
-    // Single argument is a unary division operation.
-    if first.next.is_none() {
-        return Value::Float(1.0 / total);
+    let mut total = match value {
+        Value::Integer(value) => Ok(value as f64),
+        Value::Float(value) => Ok(value),
+        result => Err(NativeError::NumberExpected(result)),
+    }?;
+
+    // Single argument is a unary negation operation.
+    if next.is_nil() {
+        return Ok(Value::number(1.0 / total));
     }
 
-    link = first.next;
-
+    rest = *next;
     loop {
-        let Some(current) = link else {
+        if rest.is_nil() {
             break;
-        };
+        }
 
-        let result = interpreter.evaluate(current.value);
+        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+
+        let result = interpreter.evaluate(*value)?;
         let result = match result {
             Value::Integer(value) => value as f64,
-            Value::Float(value) => value as f64,
-            _ => {
-                return Value::Error(format!("Expected number, received: {result}"));
+            Value::Float(value) => value,
+            result => {
+                return Err(NativeError::NumberExpected(result));
             }
         };
 
         total /= result;
 
-        link = current.next;
+        rest = *next;
     }
 
-    return Value::Float(total);
+    Ok(Value::number(total))
 }
 
 // Example:
 //
-// (error (wow we really don't support strings, huh?))
-pub fn error(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("error expects 1 argument".into());
-    };
+// (error (list wow we really don't support strings, huh?))
+pub fn error(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    if link.next.is_some() {
-        return Value::Error("error expects 1 argument".into());
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "error".into(),
+            expected: 1,
+        });
     }
 
-    let value = interpreter.evaluate(link.value);
+    let value = interpreter.evaluate(*value)?;
 
-    Value::Error(value.to_string())
+    Err(NativeError::Generic(value.to_string()))
 }
 
 // Signature:
@@ -192,41 +230,31 @@ pub fn error(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 // Lambda is special in a few ways, firstly it returns a special (opaque) function value. Secondly,
 // its first parameter, the parameter list, is never evaluated as code. It is treated as a list,
 // always. The body is only evaluated when called, otherwise it is treated as a quoted list.
-pub fn lambda(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("missing parameter list".into());
-    };
+pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    let params = match link.value {
-        Value::List(list) => list,
-        _ => {
-            return Value::Error("missing parameter list".into());
-        }
+    let params = if value.is_nil() {
+        None
+    } else {
+        Some(value.expect_cons_cell()?)
     };
+    let body = rest.expect_cons_cell()?;
 
-    fn params_to_symbols(params: Box<List>) -> Result<Vec<Symbol>, Value> {
+    fn params_to_symbols(params: ConsCell) -> ValueExpectResult<Vec<Symbol>> {
         params
             .into_iter()
-            .map(|value| match value {
-                Value::Symbol(symbol) => Ok(symbol),
-                _ => Err(Value::Error(
-                    "parameter list may only contain symbols".into(),
-                )),
-            })
-            .collect::<Result<Vec<Symbol>, Value>>()
+            .map(|value| value.expect_symbol())
+            .collect::<ValueExpectResult<Vec<Symbol>>>()
     }
 
-    let params = match params_to_symbols(params) {
-        Ok(p) => p,
-        Err(err) => return err,
-    };
-
-    let Some(body) = link.next else {
-        return Value::Error("lambda is missing body".into());
-    };
+    let params = params
+        .map(|params| params_to_symbols(params))
+        .transpose()?
+        .unwrap_or_default();
 
     let scope = interpreter.active_scope();
-    Value::Function(FunctionValue::new(scope, params, Box::new(List::new(body))))
+
+    Ok(Value::Function(FunctionValue::new(scope, params, body)))
 }
 
 /// Signature:
@@ -241,64 +269,36 @@ pub fn lambda(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 ///
 /// Expands a given macro into the form(s) that it would produce before evaluation. No need to
 /// quote, as the input is treated as quoted by default.
-pub fn macroexpand(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("macroexpand expects 1 argument".into());
-    };
+pub fn macroexpand(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    if link.next.is_some() {
-        return Value::Error("macroexpand expects 1 argument".into());
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "macroexpand".into(),
+            expected: 1,
+        });
     }
 
-    let link = match link.value {
-        Value::List(list) => list.head,
-        _ => {
-            return Value::Error(format!(
-                "macro expects argument to be a list, got: {}",
-                link.value
-            ));
-        }
-    };
+    let ConsCell { value, rest } = value.expect_cons_cell()?;
 
-    let Some(link) = link else {
-        return Value::Error("missing macro name in parameter list".into());
-    };
-
-    let macro_name = match link.value {
-        Value::Symbol(ref symbol) => symbol,
-        _ => {
-            return Value::Error(format!(
-                "macro name in parameter list must be a symbol, got: {}",
-                link.value
-            ));
-        }
-    };
+    let macro_name = value.expect_symbol()?;
 
     let macro_value = interpreter.read_value(&macro_name);
 
     let Some(macro_value) = macro_value else {
-        return Value::Error(format!("no macro named '{}' found", macro_name));
+        return Err(NativeError::UnresolvedMacro(macro_name));
     };
 
-    let MacroValue { params, body } = match macro_value {
-        Value::Macro(macro_value) => macro_value,
-        _ => {
-            return Value::Error(format!("macro expected, got: {}", link.value));
-        }
-    };
+    let MacroValue { params, body } = macro_value.expect_macro()?;
 
-    let arguments = if let Some(next) = link.next {
-        next.into_iter().map(|value| value).collect::<Vec<_>>()
-    } else {
-        Vec::default()
-    };
+    let arguments = rest.into_iter().map(|value| value).collect::<Vec<_>>();
 
     if arguments.len() != params.len() {
-        return Value::Error(format!(
-            "macro param count {} does not match argument count {}",
-            params.len(),
-            arguments.len()
-        ));
+        return Err(NativeError::MismatchedArgumentAndParameterCount {
+            name: "macroexpand".into(),
+            params: params.len(),
+            arguments: arguments.len(),
+        });
     }
 
     let mut param_map = HashMap::new();
@@ -306,71 +306,47 @@ pub fn macroexpand(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Va
         param_map.insert(param, argument);
     }
 
-    let expanded = interpreter.expand_macro(&param_map, Value::List(body));
+    let expanded = interpreter.expand_macro(&param_map, Value::ConsCell(body));
 
     println!("{expanded}");
 
-    Value::default()
+    Ok(Value::nil())
 }
 
 /// Defines a macro, which just expands the provided symbols as-is into other values which are then
 /// evaluated. See `macroexpand` to see this expansion as it is before evaluation.
-pub fn defmacro(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("defmacro expects 2 arguments".into());
-    };
+pub fn defmacro(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    let symbol = match link.value {
-        Value::Symbol(symbol) => symbol,
-        _ => {
-            return Value::Error(format!(
-                "defmacro expects first argument to be a symbol, got: {}",
-                link.value
-            ));
-        }
-    };
+    let symbol = value.expect_symbol()?;
+    let ConsCell {
+        value: params,
+        rest,
+    } = rest.expect_cons_cell()?;
+    let ConsCell { value: body, rest } = rest.expect_cons_cell()?;
 
-    let Some(link) = link.next else {
-        return Value::Error("missing parameter list".into());
-    };
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "defmacro".into(),
+            expected: 3,
+        });
+    }
 
-    let params = match link.value {
-        Value::List(list) => list,
-        _ => {
-            return Value::Error("missing parameter list".into());
-        }
-    };
+    let body = body.expect_cons_cell()?;
 
-    fn params_to_symbols(params: Box<List>) -> Result<Vec<Symbol>, Value> {
+    fn params_to_symbols(params: Value) -> ValueExpectResult<Vec<Symbol>> {
         params
             .into_iter()
-            .map(|value| match value {
-                Value::Symbol(symbol) => Ok(symbol),
-                _ => Err(Value::Error(
-                    "parameter list may only contain symbols".into(),
-                )),
-            })
-            .collect::<Result<Vec<Symbol>, Value>>()
+            .map(|value| value.expect_symbol())
+            .collect::<ValueExpectResult<Vec<Symbol>>>()
     }
 
-    let params = match params_to_symbols(params) {
-        Ok(p) => p,
-        Err(err) => return err,
-    };
-
-    let Some(body) = link.next else {
-        return Value::Error("missing body".into());
-    };
-
-    if body.next.is_some() {
-        return Value::Error("trailing arguments after body found".into());
-    }
-
-    let value = Value::Macro(MacroValue::new(params, Box::new(List::new(body))));
+    let params = params_to_symbols(*params)?;
+    let value = Value::Macro(MacroValue::new(params, body));
 
     interpreter.set_value(symbol.clone(), value);
 
-    Value::Symbol(symbol)
+    Ok(Value::Symbol(symbol))
 }
 
 /// Signature:
@@ -379,63 +355,54 @@ pub fn defmacro(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value
 ///
 /// Example:
 ///
-/// (apply (lambda (a b) (+ a b)) (5 2))
+/// (apply (lambda (a b) (+ a b)) (list 5 2))
 /// > 7
 ///
 /// Apply is at the heart of the interpreter. It takes in a list with an expected format and
 /// executes the function.
-pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        // TODO: Support providing a symbol which represents the native function as input
-        return Value::Error("missing function reference".into());
-    };
+pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value: func, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: args, rest } = rest.expect_cons_cell()?;
 
-    let value = interpreter.evaluate(link.value);
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "apply".into(),
+            expected: 2,
+        });
+    }
+
+    let func = interpreter.evaluate(*func)?;
 
     let FunctionValue {
         parent_scope,
         params,
         body,
-    } = match value {
-        Value::Function(function) => function,
-        _ => {
-            return Value::Error(format!("missing function reference, got: {}", value));
-        }
+    } = func.expect_function()?;
+
+    let args = interpreter.evaluate(*args)?;
+    let args = if args.is_nil() {
+        Vec::default()
+    } else {
+        args.expect_cons_cell()?.into_iter().collect::<Vec<_>>()
     };
 
-    let Some(arguments) = link.next else {
-        return Value::Error("apply is missing list arguments".into());
-    };
-
-    let arguments = interpreter.evaluate(arguments.value);
-    let arguments = match arguments {
-        Value::List(list) => list,
-        _ => {
-            return Value::Error(format!(
-                "apply is missing list arguments, got: {}",
-                arguments
-            ));
-        }
-    };
-
-    let arguments = arguments.into_iter().collect::<Vec<_>>();
-    if arguments.len() != params.len() {
-        return Value::Error(format!(
-            "function param count {} does not match argument count {}",
-            params.len(),
-            arguments.len()
-        ));
+    if args.len() != params.len() {
+        return Err(NativeError::MismatchedArgumentAndParameterCount {
+            name: "apply".into(),
+            params: params.len(),
+            arguments: args.len(),
+        });
     }
 
     let scope = Rc::new(RefCell::new(Box::new(Scope::new(Some(parent_scope)))));
     {
         let mut scope = scope.borrow_mut();
-        for (key, value) in params.into_iter().zip(arguments) {
+        for (key, value) in params.into_iter().zip(args) {
             scope.insert(key, value);
         }
     }
     interpreter.push_active_scope(scope);
-    let result = progn(interpreter, body.head);
+    let result = progn(interpreter, Value::ConsCell(body));
     interpreter.pop_active_scope();
 
     result
@@ -445,17 +412,13 @@ pub fn apply(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 /// (progn (&rest EXPRS)) -> VALUE
 ///
 /// Evaluates each expression and returns the value returned by the last expression.
-pub fn progn(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::default();
-    };
-
+pub fn progn(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
     let mut result = Value::default();
-    for value in Link::iter(&link) {
-        result = interpreter.evaluate(value.clone());
+    for value in Value::iter(&rest) {
+        result = interpreter.evaluate(value.clone())?;
     }
 
-    result
+    Ok(result)
 }
 
 /// Signature:
@@ -468,38 +431,30 @@ pub fn progn(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 /// > 20
 ///
 /// Setq (or "set quoted") sets the result of the expression for each pair to the symbol preceding
-/// it. in each pair. It is a special operator in that it does not evaluate the first parameter of
+/// it in each pair. It is a special operator in that it does not evaluate the first parameter of
 /// each pair as an expression.
-pub fn setq(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value {
+pub fn setq(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
     let mut last_value = None;
     loop {
-        let Some(current_link) = link else {
-            break;
+        let ConsCell { value, rest: next } = match rest {
+            Value::ConsCell(cell) => cell,
+            _ => break,
         };
+        let symbol = value.expect_symbol()?;
+        let ConsCell {
+            value: next_value,
+            rest: next_rest,
+        } = next.expect_cons_cell()?;
 
-        let symbol = match current_link.value {
-            Value::Symbol(symbol) => symbol,
-            _ => {
-                return Value::Error(format!(
-                    "setq expects first argument of pair to be a symbol, got: {}",
-                    current_link.value
-                ));
-            }
-        };
-
-        let Some(current_link) = current_link.next else {
-            return Value::Error("setq expects pairs".into());
-        };
-
-        let value = interpreter.evaluate(current_link.value);
+        let value = interpreter.evaluate(*next_value)?;
 
         interpreter.set_value(symbol, value.clone());
 
         last_value = Some(value);
-        link = current_link.next;
+        rest = *next_rest;
     }
 
-    last_value.unwrap_or_else(Value::default)
+    Ok(last_value.unwrap_or_else(Value::nil))
 }
 
 /// Signature:
@@ -507,86 +462,80 @@ pub fn setq(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value
 /// (eval LIST) -> VALUE
 ///
 /// Eval evaluates a provided list as an expression. This allows data to be evaluated as code.
-pub fn eval(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("eval expects 1 argument".into());
-    };
+pub fn eval(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    if link.next.is_some() {
-        return Value::Error("eval expects 1 argument".into());
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "eval".into(),
+            expected: 1,
+        });
     }
 
-    let value = interpreter.evaluate(link.value);
+    let result = interpreter.evaluate(*value)?;
+    let result = result.expect_cons_cell()?;
 
-    let list = match value {
-        Value::List(list) => list,
-        _ => {
-            return Value::Error(format!("eval expects argument to be a list, got: {value}"));
-        }
-    };
-
-    interpreter.evaluate_list(list)
+    interpreter.evaluate_list(result)
 }
 
-pub fn equal(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("equal expects 2 arguments".into());
-    };
+pub fn equal(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value: a, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: b, rest } = rest.expect_cons_cell()?;
 
-    let a = interpreter.evaluate(link.value);
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "=".into(),
+            expected: 2,
+        });
+    }
 
-    let Some(link) = link.next else {
-        return Value::Error("equal expects 2 arguments".into());
-    };
-
-    let b = interpreter.evaluate(link.value);
+    let a = interpreter.evaluate(*a)?;
+    let b = interpreter.evaluate(*b)?;
 
     // TODO:
     // 1. Cast integers into floats if types are cross-compared.
     // 2. Generally improve this check. Equals on function definitions overflows the stack.
-    Value::cond(a.eq(&b))
+    Ok(Value::cond(a.eq(&b)))
 }
 
-pub fn less(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("equal expects 2 arguments".into());
-    };
+pub fn less(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value: a, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: b, rest } = rest.expect_cons_cell()?;
 
-    let a = interpreter.evaluate(link.value);
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "<".into(),
+            expected: 2,
+        });
+    }
 
-    let Some(link) = link.next else {
-        return Value::Error("equal expects 2 arguments".into());
-    };
-
-    let b = interpreter.evaluate(link.value);
+    let a = interpreter.evaluate(*a)?;
+    let b = interpreter.evaluate(*b)?;
 
     let result = match (a, b) {
         (Value::Integer(a), Value::Integer(b)) => a < b,
         (Value::Float(a), Value::Float(b)) => a < b,
         (Value::Integer(a), Value::Float(b)) => (a as f64) < b,
         (Value::Float(a), Value::Integer(b)) => a < (b as f64),
-        _ => {
-            return Value::Error("Can't compare these two values".into());
+        (x, _) => {
+            // TODO: Correctly model the wrong type, here.
+            return Err(NativeError::NumberExpected(x));
         }
     };
 
-    Value::cond(result)
+    Ok(Value::cond(result))
 }
 
 /// Signature:
 ///
 /// (or (&rest exprs)) -> t | ()
 ///
-/// Both `and` and `or` are also short-circuiting native methods. It might be possible to implement
+/// Both `and` and `or` are short-circuiting native methods. It might be possible to implement
 /// these without a native implementation for both, but leaving for now.
-pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::t();
-    };
-
+pub fn or(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
     let mut result = false;
-    for value in link.into_iter() {
-        let value = interpreter.evaluate(value);
+    for value in rest.into_iter() {
+        let value = interpreter.evaluate(value)?;
         result |= value.is_true();
 
         if result {
@@ -594,23 +543,19 @@ pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         }
     }
 
-    Value::cond(result)
+    Ok(Value::cond(result))
 }
 
 /// Signature:
 ///
 /// (and (&rest exprs)) -> t | ()
 ///
-/// Both `and` and `or` are also short-circuiting native methods. It might be possible to implement
+/// Both `and` and `or` are short-circuiting native methods. It might be possible to implement
 /// these without a native implementation for both, but leaving for now.
-pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::t();
-    };
-
+pub fn and(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
     let mut result = true;
-    for value in link.into_iter() {
-        let value = interpreter.evaluate(value);
+    for value in rest.into_iter() {
+        let value = interpreter.evaluate(value)?;
         result &= value.is_true();
 
         if !result {
@@ -618,7 +563,7 @@ pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         }
     }
 
-    Value::cond(result)
+    Ok(Value::cond(result))
 }
 
 /// Signature:
@@ -626,209 +571,161 @@ pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 /// (if <COND_EXPR> <TRUE_EXPR> <FALSE_EXPR>) -> <TRUE_EXPR>
 ///
 /// If is special in that it "short-circuits" the evaluation only to the branch that is followed.
-pub fn if_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("if expects 3 arguments".into());
-    };
+pub fn if_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value: cond, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: pass, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: fail, rest } = rest.expect_cons_cell()?;
 
-    let cond = interpreter.evaluate(link.value);
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "if".into(),
+            expected: 3,
+        });
+    }
 
-    // Errors and empty list are false, everything else is true.
-    let cond = match cond {
-        Value::List(list) => list.head.is_some(),
-        Value::Error(_) => false,
-        _ => true,
-    };
+    let cond = interpreter.evaluate(*cond)?;
+    let cond = cond.is_true();
 
-    let Some(pass) = link.next else {
-        return Value::Error("if expects 3 arguments".into());
-    };
-
-    let Some(fail) = pass.next else {
-        return Value::Error("if expects 3 arguments".into());
-    };
-
-    interpreter.evaluate(if cond { pass.value } else { fail.value })
+    interpreter.evaluate(if cond { *pass } else { *fail })
 }
 
 /// Signature:
 ///
-/// (quote (value)) -> value
+/// (quote value) -> value
 ///
 /// Quote is special in that does not evaluate its argument. It returns it as-is, as data.
-pub fn quote(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("quote expects 1 argument".into());
-    };
+pub fn quote(_interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    if link.next.is_some() {
-        return Value::Error("quote expects 1 argument".into());
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "quote".into(),
+            expected: 1,
+        });
     }
 
-    link.value
+    Ok(*value)
+}
+
+/// Signature:
+///
+/// (list (&rest args)) -> LIST
+pub fn list(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    // TODO: Avoid this allocation
+    let values = rest
+        .into_iter()
+        .map(|value| interpreter.evaluate(value))
+        .collect::<NativeResult<Vec<_>>>()?;
+
+    Ok(Value::join(values))
+}
+
+/// Signature:
+///
+/// (car <EXPR>) -> LIST
+pub fn car(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "car".into(),
+            expected: 1,
+        });
+    }
+
+    let value = interpreter.evaluate(*value)?;
+    let ConsCell { value, .. } = value.expect_cons_cell()?;
+
+    Ok(*value)
 }
 
 /// Signature:
 ///
 /// (cdr <EXPR>) -> LIST
-pub fn list(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::default();
-    };
+pub fn cdr(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    let values = link.into_iter().map(|value| interpreter.evaluate(value));
-
-    let Some(link) = Value::join(values) else {
-        return Value::default();
-    };
-
-    Value::list(List::new(link))
-}
-
-/// Signature:
-///
-/// (cdr <EXPR>) -> LIST
-pub fn car(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("car expects 1 argument".into());
-    };
-
-    if link.next.is_some() {
-        return Value::Error("car expects 1 argument".into());
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "cdr".into(),
+            expected: 1,
+        });
     }
 
-    let list = match link.value {
-        Value::List(list) => list,
-        _ => return Value::Error("car expects a list argument".into()),
-    };
+    let value = interpreter.evaluate(*value)?;
+    let ConsCell { rest, .. } = value.expect_cons_cell()?;
 
-    let value = interpreter.evaluate_list(list);
-
-    let list = match value {
-        Value::List(list) => list,
-        _ => return Value::Error("car expects a list argument".into()),
-    };
-
-    let Some(head) = list.head else {
-        return Value::List(Box::new(List::default()));
-    };
-
-    head.value
-}
-
-/// Signature
-///
-/// (cdr <EXPR>) -> <VALUE>
-pub fn cdr(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("cdr expects 1 argument".into());
-    };
-
-    if link.next.is_some() {
-        return Value::Error("cdr expects 1 argument".into());
-    }
-
-    let value = interpreter.evaluate(link.value);
-    let list = match value {
-        Value::List(list) => list,
-        _ => return Value::Error("cdr expects a list argument".into()),
-    };
-
-    let Some(head) = list.head else {
-        return Value::List(Box::new(List::default()));
-    };
-
-    let Some(rest) = head.next else {
-        return Value::List(Box::new(List::default()));
-    };
-
-    Value::list(List::new(rest))
+    Ok(*rest)
 }
 
 /// Signature:
 ///
 /// (print <EXPR>) -> <VALUE>
-pub fn print(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("message expects 1 argument".into());
-    };
+pub fn print(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    if link.next.is_some() {
-        return Value::Error("message expects 1 argument".into());
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "print".into(),
+            expected: 1,
+        });
     }
 
-    let value = interpreter.evaluate(link.value);
+    let value = interpreter.evaluate(*value)?;
 
     println!("{value}");
 
-    value
+    Ok(value)
 }
 
-pub fn let_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("let expects 2 arguments".into());
-    };
-
-    let variable_list = match link.value {
-        Value::List(list) => list,
-        _ => {
-            return Value::Error("first argument of let 2 must be a list".into());
-        }
-    };
-
-    let rest = link.next;
+/// Signature:
+///
+/// (let (LIST &args rest)) -> VALUE
+pub fn let_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell {
+        value: mut variable_list,
+        rest,
+    } = rest.expect_cons_cell()?;
 
     let scope = Rc::new(RefCell::new(Box::new(Scope::new(Some(
         interpreter.active_scope(),
     )))));
     {
         let mut scope = scope.borrow_mut();
-        let mut link = variable_list.head;
         loop {
-            let Some(current_link) = link else {
+            if variable_list.is_nil() {
                 break;
-            };
+            }
 
-            let pair = match current_link.value {
-                Value::List(list) => list.head,
-                _ => {
-                    return Value::Error(format!(
-                        "let expects variables specified as a list of lists pairs, got: {}",
-                        current_link.value
-                    ));
-                }
-            };
+            let ConsCell { value: pair, rest } = variable_list.expect_cons_cell()?;
 
-            let Some(pair) = pair else {
-                return Value::Error(
-                    "let encountered empty list for variable specification".into(),
-                );
-            };
+            let ConsCell {
+                value: symbol,
+                rest: pair_rest,
+            } = pair.expect_cons_cell()?;
+            let ConsCell {
+                value,
+                rest: pair_rest,
+            } = pair_rest.expect_cons_cell()?;
 
-            let symbol = match pair.value {
-                Value::Symbol(symbol) => symbol,
-                _ => {
-                    return Value::Error(format!(
-                        "let expects first argument of pair to be a symbol, got: {}",
-                        pair.value
-                    ));
-                }
-            };
+            if !pair_rest.is_nil() {
+                return Err(NativeError::InvalidExactArgumentCount {
+                    name: "let pair".into(),
+                    expected: 2,
+                });
+            }
 
-            let Some(pair) = pair.next else {
-                return Value::Error("let expects pairs".into());
-            };
-
-            let value = interpreter.evaluate(pair.value);
+            let symbol = symbol.expect_symbol()?;
+            let value = interpreter.evaluate(*value)?;
 
             scope.insert(symbol, value);
 
-            link = current_link.next;
+            variable_list = rest
         }
     }
 
     interpreter.push_active_scope(scope);
-    let result = progn(interpreter, rest);
+    let result = progn(interpreter, *rest);
     interpreter.pop_active_scope();
 
     result
@@ -837,24 +734,17 @@ pub fn let_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Val
 /// Signature:
 ///
 /// (boundp (SYMBOL)) -> t | ()
-pub fn boundp(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
-    let Some(link) = link else {
-        return Value::Error("boundp expects 1 argument".into());
-    };
+pub fn boundp(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
-    if link.next.is_some() {
-        return Value::Error("boundp expects 1 argument".into());
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "boundp".into(),
+            expected: 1,
+        });
     }
 
-    let symbol = match link.value {
-        Value::Symbol(symbol) => symbol,
-        _ => {
-            return Value::Error(format!(
-                "boundp expects argument to be a symbol, got: {}",
-                link.value
-            ));
-        }
-    };
+    let symbol = value.expect_symbol()?;
 
-    Value::cond(interpreter.read_value(&symbol).is_some())
+    Ok(Value::cond(interpreter.read_value(&symbol).is_some()))
 }

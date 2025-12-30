@@ -3,12 +3,14 @@ use std::{iter::Peekable, vec::IntoIter};
 use thiserror::Error;
 
 use crate::{
-    ast::{Link, List, Symbol, Value},
+    ast::{ConsCell, Symbol, Value, ValueExpectError},
     token::Token,
 };
 
 #[derive(Error, Debug)]
 pub enum ParseError {
+    #[error(transparent)]
+    ValueExpectError(#[from] ValueExpectError),
     #[error("Unexpected ')', expected an expression (list or symbol)")]
     UnexpectedRParen,
     #[error("Expected ')' symbol to end list, received {0:?}")]
@@ -35,7 +37,7 @@ impl Parser {
             match token {
                 Token::LParen => {
                     let list = self.parse_list()?;
-                    lists.push(Value::List(Box::new(list)));
+                    lists.push(list);
                 }
                 Token::Symbol(symbol) => {
                     lists.push(Value::Symbol(Symbol::new(symbol.clone())));
@@ -50,9 +52,7 @@ impl Parser {
         Ok(lists)
     }
 
-    pub fn parse_list(&mut self) -> Result<List, ParseError> {
-        let mut list = List::default();
-
+    pub fn parse_list(&mut self) -> Result<Value, ParseError> {
         let Some(token) = self.tokens.next() else {
             return Err(ParseError::ExpectedLParen(None));
         };
@@ -61,22 +61,21 @@ impl Parser {
             return Err(ParseError::ExpectedLParen(Some(token)));
         }
 
-        let mut prev_link: Option<&mut Box<Link>> = None;
+        let mut list: Option<ConsCell> = None;
+        let mut prev_cell: Option<&mut ConsCell> = None;
 
         while let Some(token) = self.tokens.peek() {
             match token {
                 Token::LParen => {
                     let result_list = self.parse_list()?;
-                    let result_list = Box::new(result_list);
+                    let new_cell = ConsCell::new(result_list);
 
-                    let new_link = Box::new(Link::new(Value::List(result_list)));
-
-                    if let Some(prev) = prev_link {
-                        prev.next = Some(new_link);
-                        prev_link = Some(prev.next.as_mut().unwrap());
+                    if let Some(prev) = prev_cell {
+                        prev.rest = Box::new(Value::ConsCell(new_cell));
+                        prev_cell = Some(prev.rest.expect_cons_cell_mut()?);
                     } else {
-                        list.head = Some(new_link);
-                        prev_link = list.head.as_mut();
+                        list = Some(new_cell);
+                        prev_cell = list.as_mut();
                     }
                 }
                 Token::Symbol(symbol) => {
@@ -88,14 +87,14 @@ impl Parser {
                         Value::symbol(symbol.clone())
                     };
 
-                    let new_link = Box::new(Link::new(value));
+                    let new_cell = ConsCell::new(value);
 
-                    if let Some(prev) = prev_link {
-                        prev.next = Some(new_link);
-                        prev_link = Some(prev.next.as_mut().unwrap());
+                    if let Some(prev) = prev_cell {
+                        prev.rest = Box::new(Value::ConsCell(new_cell));
+                        prev_cell = Some(prev.rest.expect_cons_cell_mut()?);
                     } else {
-                        list.head = Some(new_link);
-                        prev_link = list.head.as_mut();
+                        list = Some(new_cell);
+                        prev_cell = list.as_mut();
                     }
 
                     // Drop the symbol
@@ -115,6 +114,10 @@ impl Parser {
             return Err(ParseError::ExpectedRParen(Some(token)));
         }
 
-        Ok(list)
+        Ok(if let Some(list) = list {
+            Value::ConsCell(list)
+        } else {
+            Value::Nil
+        })
     }
 }

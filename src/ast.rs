@@ -6,179 +6,184 @@ use std::{
     rc::Rc,
 };
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct List {
-    pub head: Option<Box<Link>>,
+use thiserror::Error;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConsCell {
+    pub value: Box<Value>,
+    pub rest: Box<Value>,
 }
 
-impl List {
-    pub fn new(head: Box<Link>) -> Self {
-        Self { head: Some(head) }
+impl ConsCell {
+    pub fn new(value: Value) -> Self {
+        Self::new_with_boxed_value(Box::new(value))
     }
 
-    pub fn new_option(head: Option<Box<Link>>) -> Self {
-        Self { head }
-    }
-}
-
-impl List {
-    pub fn iter(&self) -> LinkIter<'_> {
-        LinkIter {
-            link: self.head.as_ref(),
+    pub fn new_with_boxed_value(value: Box<Value>) -> Self {
+        ConsCell {
+            value,
+            rest: Box::new(Value::nil()),
         }
     }
-}
 
-impl IntoIterator for Box<List> {
-    type Item = Value;
-
-    type IntoIter = LinkIntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        LinkIntoIter { link: self.head }
+    pub fn with_boxed_value(mut self, value: Box<Value>) -> Self {
+        self.value = value;
+        self
     }
-}
 
-impl IntoIterator for List {
-    type Item = Value;
-
-    type IntoIter = LinkIntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Box::new(self).into_iter()
+    pub fn with_value(self, value: Value) -> Self {
+        self.with_boxed_value(Box::new(value))
     }
-}
 
-impl Display for List {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.head.is_none() {
-            f.write_str("nil")?;
+    pub fn with_boxed_rest(mut self, rest: Box<Value>) -> Self {
+        self.rest = rest;
+        self
+    }
+
+    pub fn with_rest_option(mut self, rest: Option<Box<Value>>) -> Self {
+        self.rest = rest.unwrap_or_default();
+        self
+    }
+
+    pub fn with_rest(self, rest: Value) -> Self {
+        // TODO: Should this panic if set without a value? I.e., an invalid state.
+        self.with_boxed_rest(Box::new(rest))
+    }
+
+    pub fn next_is_nil(&self) -> bool {
+        match self.rest.as_ref() {
+            Value::Nil => true,
+            _ => false,
+        }
+    }
+
+    fn fmt_inner(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ConsCell { value, rest } = self;
+        value.fmt(f)?;
+
+        if rest.is_nil() {
             return Ok(());
         }
 
-        f.write_char('(')?;
-        if let Some(head) = &self.head {
-            head.fmt(f)?;
+        write!(f, " ")?;
+        match self.rest.as_ref() {
+            Value::ConsCell(cell) => cell.fmt_inner(f),
+            rest => rest.fmt(f),
         }
+    }
+
+    pub fn join<T>(cells: T) -> Option<ConsCell>
+    where
+        T: IntoIterator<Item = ConsCell>,
+    {
+        // TODO: Prefer not to collect into a Vec. We want to build it backwards so we return the
+        // first cons cell.
+        cells
+            .into_iter()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .reduce(|acc, mut curr| {
+                curr.rest = Box::new(Value::ConsCell(acc));
+                curr
+            })
+    }
+}
+
+impl IntoIterator for Value {
+    type Item = Value;
+
+    type IntoIter = ValueIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ValueIntoIter { value: Some(self) }
+    }
+}
+
+impl IntoIterator for ConsCell {
+    type Item = Value;
+
+    type IntoIter = ValueIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ValueIntoIter {
+            value: Some(Value::ConsCell(self)),
+        }
+    }
+}
+
+impl Display for ConsCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_char('(')?;
+        self.fmt_inner(f)?;
         f.write_char(')')?;
         Ok(())
     }
 }
 
-/// In a regular lisp, the next value could technically be any value Lisp value, not just a link.
-/// Another way of thinking of this is that a linked list should terminate in a link to an empty
-/// linked list (indicating `nil`). For now, we'll leave this as-is.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Link {
-    pub value: Value,
-    pub next: Option<Box<Link>>,
+pub struct ValueIntoIter {
+    pub value: Option<Value>,
 }
 
-impl Link {
-    pub fn new(value: Value) -> Self {
-        Self { value, next: None }
-    }
-
-    pub fn new_with_link(value: Value, link: Option<Box<Link>>) -> Self {
-        Self { value, next: link }
-    }
-
-    pub fn with_next(mut self, next: Option<Box<Self>>) -> Self {
-        self.next = next;
-        self
-    }
-
-    pub fn iter(link: &Box<Self>) -> LinkIter<'_> {
-        LinkIter { link: Some(link) }
-    }
-
-    pub fn join<T>(links: T) -> Option<Box<Link>>
-    where
-        T: IntoIterator<Item = Box<Link>>,
-    {
-        let mut links = links.into_iter();
-        let Some(mut first_link) = links.next() else {
-            return None;
-        };
-
-        let mut last_link: &mut Box<Link> = &mut first_link;
-
-        while let Some(next) = links.next() {
-            last_link.next = Some(next);
-            last_link = last_link.next.as_mut().unwrap();
-        }
-
-        Some(first_link)
-    }
-}
-
-impl IntoIterator for Box<Link> {
-    type Item = Value;
-
-    type IntoIter = LinkIntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        LinkIntoIter { link: Some(self) }
-    }
-}
-
-impl IntoIterator for Link {
-    type Item = Value;
-
-    type IntoIter = LinkIntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Box::new(self).into_iter()
-    }
-}
-
-pub struct LinkIntoIter {
-    pub link: Option<Box<Link>>,
-}
-
-impl Iterator for LinkIntoIter {
+impl Iterator for ValueIntoIter {
     type Item = Value;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(link) = self.link.take() {
-            let Link { value, next } = *link;
-            self.link = next;
-            return Some(value);
+        if let Some(value) = self.value.take() {
+            let cell = match value {
+                Value::ConsCell(cell) => cell,
+                Value::Nil => {
+                    self.value = None;
+                    return None;
+                }
+                _ => {
+                    return Some(value);
+                }
+            };
+
+            let ConsCell { value, rest } = cell;
+
+            self.value = Some(*rest);
+            return Some(*value);
         }
         None
     }
 }
 
-pub struct LinkIter<'list> {
-    pub link: Option<&'list Box<Link>>,
+pub struct ValueIter<'value> {
+    pub value: Option<&'value Value>,
 }
 
-impl<'list> Iterator for LinkIter<'list> {
-    type Item = &'list Value;
+impl<'value> Iterator for ValueIter<'value> {
+    type Item = &'value Value;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(link) = self.link.take() {
-            self.link = link.next.as_ref();
-            return Some(&link.value);
+        if let Some(value) = self.value.take() {
+            let cell = match value {
+                Value::ConsCell(cell) => cell,
+                Value::Nil => {
+                    self.value = None;
+                    return None;
+                }
+                _ => {
+                    return Some(value);
+                }
+            };
+
+            let ConsCell { value, rest: next } = cell;
+
+            self.value = Some(next.as_ref());
+            return Some(value.as_ref());
         }
         None
     }
 }
 
-impl Display for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.value.fmt(f)?;
-        if let Some(next) = &self.next {
-            f.write_char(' ')?;
-            next.fmt(f)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub enum Value {
-    List(Box<List>),
+    #[default]
+    Nil,
+    ConsCell(ConsCell),
     Symbol(Symbol),
     Integer(i64),
     Float(f64),
@@ -187,11 +192,21 @@ pub enum Value {
     Macro(MacroValue),
 }
 
-impl Value {
-    pub fn list(list: List) -> Self {
-        Self::List(Box::new(list))
-    }
+#[derive(Debug, Clone, Error)]
+pub enum ValueExpectError {
+    #[error("Expected non-empty list, received: {0}")]
+    ExpectedNonEmptyList(Value),
+    #[error("Expected symbol, received: {0}")]
+    ExpectedSymbol(Value),
+    #[error("Expected macro reference, received: {0}")]
+    ExpectedMacro(Value),
+    #[error("Expected function reference, received: {0}")]
+    ExpectedFunction(Value),
+}
 
+pub type ValueExpectResult<T> = Result<T, ValueExpectError>;
+
+impl Value {
     pub fn symbol(symbol: String) -> Self {
         Self::Symbol(Symbol::new(symbol))
     }
@@ -206,37 +221,88 @@ impl Value {
         Value::Symbol(Symbol::t())
     }
 
+    /// Returns the nil value.
+    pub fn nil() -> Self {
+        Value::default()
+    }
+
     pub fn is_true(&self) -> bool {
-        match self {
-            Value::List(list) => list.head.is_some(),
-            Value::Error(_) => false,
-            _ => true,
+        !self.is_nil()
+    }
+
+    pub fn number(value: f64) -> Value {
+        if value.trunc() == value {
+            Value::Integer(value as i64)
+        } else {
+            Value::Float(value)
         }
     }
 
-    pub fn join<T>(iterator: T) -> Option<Box<Link>>
+    pub fn is_nil(&self) -> bool {
+        match self {
+            Value::Nil => true,
+            Value::Error(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn expect_cons_cell(self) -> ValueExpectResult<ConsCell> {
+        match self {
+            Value::ConsCell(cons_cell) => Ok(cons_cell),
+            _ => Err(ValueExpectError::ExpectedNonEmptyList(self)),
+        }
+    }
+
+    pub fn expect_cons_cell_mut(&mut self) -> ValueExpectResult<&mut ConsCell> {
+        match self {
+            Value::ConsCell(cons_cell) => Ok(cons_cell),
+            _ => Err(ValueExpectError::ExpectedNonEmptyList(self.clone())),
+        }
+    }
+
+    pub fn expect_symbol(self) -> ValueExpectResult<Symbol> {
+        match self {
+            Value::Symbol(symbol) => Ok(symbol),
+            _ => Err(ValueExpectError::ExpectedSymbol(self)),
+        }
+    }
+
+    pub fn expect_function(self) -> ValueExpectResult<FunctionValue> {
+        match self {
+            Value::Function(function) => Ok(function),
+            _ => Err(ValueExpectError::ExpectedFunction(self)),
+        }
+    }
+
+    pub fn expect_macro(self) -> ValueExpectResult<MacroValue> {
+        match self {
+            Value::Macro(macro_value) => Ok(macro_value),
+            _ => Err(ValueExpectError::ExpectedMacro(self)),
+        }
+    }
+
+    pub fn iter(&self) -> ValueIter<'_> {
+        ValueIter { value: Some(self) }
+    }
+
+    pub fn join<T>(iterator: T) -> Value
     where
         T: IntoIterator<Item = Value>,
     {
-        let links = iterator.into_iter().map(|value| Box::new(Link::new(value)));
-        Link::join(links)
-    }
-}
-
-impl Default for Value {
-    fn default() -> Self {
-        Self::List(Box::new(List::default()))
+        let cells = iterator.into_iter().map(|value| ConsCell::new(value));
+        match ConsCell::join(cells) {
+            Some(cell) => Value::ConsCell(cell),
+            None => Value::nil(),
+        }
     }
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Nil => write!(f, "nil"),
             Value::Symbol(symbol) => symbol.fmt(f),
-            Value::List(list) => {
-                list.fmt(f)?;
-                Ok(())
-            }
+            Value::ConsCell(cell) => cell.fmt(f),
             Value::Integer(value) => write!(f, "{value}"),
             Value::Float(value) => write!(f, "{value}"),
             Value::Error(message) => write!(f, "<ERROR: {message}>"),
@@ -270,15 +336,11 @@ impl Display for Value {
 pub struct FunctionValue {
     pub parent_scope: Rc<RefCell<Box<Scope>>>,
     pub params: Vec<Symbol>,
-    pub body: Box<List>,
+    pub body: ConsCell,
 }
 
 impl FunctionValue {
-    pub fn new(
-        parent_scope: Rc<RefCell<Box<Scope>>>,
-        params: Vec<Symbol>,
-        body: Box<List>,
-    ) -> Self {
+    pub fn new(parent_scope: Rc<RefCell<Box<Scope>>>, params: Vec<Symbol>, body: ConsCell) -> Self {
         Self {
             parent_scope,
             params,
@@ -331,11 +393,11 @@ impl Scope {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MacroValue {
     pub params: Vec<Symbol>,
-    pub body: Box<List>,
+    pub body: ConsCell,
 }
 
 impl MacroValue {
-    pub fn new(params: Vec<Symbol>, body: Box<List>) -> Self {
+    pub fn new(params: Vec<Symbol>, body: ConsCell) -> Self {
         Self { params, body }
     }
 }

@@ -44,8 +44,14 @@ fn main() -> rustyline::Result<()> {
             }
         };
         for value in statements {
-            let result = interpreter.evaluate(value);
-            println!("{result}");
+            match interpreter.evaluate(value) {
+                Ok(result) => {
+                    println!("{result}");
+                }
+                Err(err) => {
+                    println!("ERROR: {err}");
+                },
+            }
         }
     }
 

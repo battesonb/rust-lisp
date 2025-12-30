@@ -160,7 +160,7 @@ fn error_constructs_a_raw_error() {
     (print (error (quote failure)))
     "#,
     );
-    cmd.assert().success().stdout("<ERROR: failure>\n");
+    cmd.assert().success().stderr("failure\n");
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn macroexpand_can_expand_a_macro_and_print_it() {
     );
     cmd.assert()
         .success()
-        .stdout("((setq x (lambda nil (print wow))))\n");
+        .stdout("(setq x (lambda nil (print wow)))\n");
 }
 
 #[test]

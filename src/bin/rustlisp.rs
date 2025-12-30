@@ -23,6 +23,9 @@ fn main() {
     interpreter.load_std();
 
     for value in statements {
-        let _ = interpreter.evaluate(value);
+        // TODO: Figure out error signaling/handling
+        if let Err(err) = interpreter.evaluate(value) {
+            eprintln!("{err}");
+        }
     }
 }

@@ -7,10 +7,10 @@ fn it_can_generate_stateful_functions() {
     cmd.write_stdin(
         r#"
     (defun make-accumulator ()
-        (let ((acc 0)) (lambda (inc)
-            (progn
-                (setq acc (+ acc inc))
-                acc))))
+        (let ((acc 0))
+             (lambda (inc)
+               (setq acc (+ acc inc))
+               acc)))
     (setq accumulator (make-accumulator))
     (print (accumulator 5))
     (print (accumulator 10))
@@ -29,12 +29,12 @@ fn it_use_stateful_functions_to_simulate_objects() {
         r#"
 (defun make-account(balance)
     (lambda (operation amount)
-        (if (= operation deposit)
+        (if (= operation (quote deposit))
             (setq balance (+ balance amount))
-            (if (= operation withdraw) (setq balance (- balance amount)) balance))))
+            (if (= operation (quote withdraw)) (setq balance (- balance amount)) balance))))
 (setq account (make-account 0))
-(print (account deposit 100))
-(print (account withdraw 30))
+(print (account (quote deposit) 100))
+(print (account (quote withdraw) 30))
     "#,
     );
     cmd.assert().success().stdout("100\n70\n");
