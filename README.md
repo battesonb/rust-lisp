@@ -35,4 +35,11 @@ expr  := <r_paren> expr <l_parent> | (<symbol>\s)*
 
 There is no native concept of a function. All functions are just a `lambda`.
 `defun` is just a macro (via `defmacro`) for setting a variable to a given
-lambda. There is only one scope for functions and variables.
+lambda.
+
+There is only one scope for functions and variables, making this a Lisp-1
+implementation (instead of a Lisp-2, like Common Lisp)
+
+See `std.lisp` for extensions/bootstrapping of the language. Some of the native
+functions don't actually work until `std.lisp` is bootstraps the interpreter, so
+it is a required module before anything else is loaded/called.
