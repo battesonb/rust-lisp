@@ -4,8 +4,7 @@ use crate::{
     ast::{Link, List, MacroValue, Scope, Symbol, Value},
     lexer::Lexer,
     native::{
-        add, and, apply, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less,
-        let_native, list, macroexpand, mul, or, print, progn, quote, setq, sub,
+        add, and, apply, boundp, car, cdr, defmacro, div, equal, error, eval, if_native, lambda, less, let_native, list, macroexpand, mul, or, print, progn, quote, setq, sub
     },
     parser::Parser,
 };
@@ -25,7 +24,9 @@ impl Interpreter {
     pub fn evaluate(&mut self, value: Value) -> Value {
         match value {
             Value::List(list) => self.evaluate_list(list),
-            Value::Symbol(symbol) => self.read_value(&symbol).unwrap_or(Value::Symbol(symbol)),
+            Value::Symbol(symbol) => self
+                .read_value(&symbol)
+                .unwrap_or_else(|| Value::Error(format!("Undefined variable: {}", symbol))),
             _ => value,
         }
     }
@@ -37,8 +38,10 @@ impl Interpreter {
 
         let Link { value, next } = *head;
 
-        // In case the function name is encoded in code, not actually common in implementations of Lisp.
-        let value = self.evaluate(value);
+        let value = match value {
+            Value::Symbol(symbol) => self.read_value(&symbol).unwrap_or(Value::Symbol(symbol)),
+            _ => value,
+        };
 
         match value {
             Value::Symbol(value) => self.evaluate_function(value, next),
@@ -139,22 +142,23 @@ impl Interpreter {
             "=" => equal(self, links),
             "<" => less(self, links),
             "and" => and(self, links),
-            "or" => or(self, links),
             "apply" => apply(self, links),
+            "boundp" => boundp(self, links),
             "car" => car(self, links),
             "cdr" => cdr(self, links),
+            "defmacro" => defmacro(self, links),
             "error" => error(self, links),
             "eval" => eval(self, links),
             "if" => if_native(self, links),
             "lambda" => lambda(self, links),
             "let" => let_native(self, links),
             "list" => list(self, links),
-            "progn" => progn(self, links),
-            "setq" => setq(self, links),
-            "defmacro" => defmacro(self, links),
             "macroexpand" => macroexpand(self, links),
-            "quote" => quote(self, links),
+            "or" => or(self, links),
             "print" => print(self, links),
+            "progn" => progn(self, links),
+            "quote" => quote(self, links),
+            "setq" => setq(self, links),
             _ => Value::Error(format!("Unresolved function {function}")),
         }
     }

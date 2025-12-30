@@ -1,5 +1,9 @@
 ; A very basic standard library implemented in lisp, directly.
 
+; Define sentinels for true and false
+(setq t (quote t)) ; `t` is `t` (true)
+(setq nil ())      ; `nil` is the empty list (false)
+
 ; `not` can be defined in terms of if
 (setq not (lambda (a) (if a () t)))
 

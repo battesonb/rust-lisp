@@ -8,7 +8,7 @@ fn message_can_print() {
 
     cmd.write_stdin(
         r#"
-    (print success)
+    (print (quote success))
     "#,
     );
     cmd.assert().success().stdout("success\n");

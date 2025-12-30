@@ -15,10 +15,10 @@ fn it_can_generate_stateful_functions() {
     (print (accumulator 5))
     (print (accumulator 10))
     (print (accumulator 15))
-    (print acc) ; verify that acc is still a symbol in the global scope
+    (print (boundp acc)) ; verify that acc is still a symbol in the global scope
     "#,
     );
-    cmd.assert().success().stdout("5\n15\n30\nacc\n");
+    cmd.assert().success().stdout("5\n15\n30\nnil\n");
 }
 
 #[test]

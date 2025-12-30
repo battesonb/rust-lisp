@@ -51,6 +51,11 @@ impl IntoIterator for List {
 
 impl Display for List {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.head.is_none() {
+            f.write_str("nil")?;
+            return Ok(());
+        }
+
         f.write_char('(')?;
         if let Some(head) = &self.head {
             head.fmt(f)?;
@@ -191,6 +196,16 @@ impl Value {
         Self::Symbol(Symbol::new(symbol))
     }
 
+    /// Returns either the `t` Symbol or the empty list (nil) depending on the provided condition.
+    pub fn cond(cond: bool) -> Self {
+        if cond { Self::t() } else { Self::default() }
+    }
+
+    /// Returns the symbol representing "true".
+    pub fn t() -> Self {
+        Value::Symbol(Symbol::t())
+    }
+
     pub fn is_true(&self) -> bool {
         match self {
             Value::List(list) => list.head.is_some(),
@@ -224,7 +239,7 @@ impl Display for Value {
             }
             Value::Integer(value) => write!(f, "{value}"),
             Value::Float(value) => write!(f, "{value}"),
-            Value::Error(message) => write!(f, "<ERROR:\n{message}>"),
+            Value::Error(message) => write!(f, "<ERROR: {message}>"),
             Value::Function(FunctionValue { params, body, .. }) => write!(
                 f,
                 "<FUNCTION ({}) {}>",
@@ -333,6 +348,11 @@ pub struct Symbol {
 impl Symbol {
     pub fn new(value: String) -> Self {
         Self { value }
+    }
+
+    /// Returns the symbol representing "true".
+    pub fn t() -> Self {
+        Symbol::new("t".into())
     }
 
     pub fn as_str(&self) -> &str {

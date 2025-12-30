@@ -12,7 +12,7 @@ fn less_than_or_equal_to() {
     (print (<= 7 6))
     "#,
     );
-    cmd.assert().success().stdout("t\nt\n()\n");
+    cmd.assert().success().stdout("t\nt\nnil\n");
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn greater_than_or_equal_to() {
     (print (>= 7 6))
     "#,
     );
-    cmd.assert().success().stdout("()\nt\nt\n");
+    cmd.assert().success().stdout("nil\nt\nt\n");
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn greater_than() {
     (print (> 7 6))
     "#,
     );
-    cmd.assert().success().stdout("()\n()\nt\n");
+    cmd.assert().success().stdout("nil\nnil\nt\n");
 }
 
 #[test]

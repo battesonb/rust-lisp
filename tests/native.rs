@@ -157,10 +157,10 @@ fn error_constructs_a_raw_error() {
 
     cmd.write_stdin(
         r#"
-    (print (error failure))
+    (print (error (quote failure)))
     "#,
     );
-    cmd.assert().success().stdout("<ERROR:\nfailure>\n");
+    cmd.assert().success().stdout("<ERROR: failure>\n");
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn quote_prevents_evaluation_of_arguments() {
     (print (quote (lambda () (+ 2 2))))
     "#,
     );
-    cmd.assert().success().stdout("(lambda () (+ 2 2))\n");
+    cmd.assert().success().stdout("(lambda nil (+ 2 2))\n");
 }
 
 #[test]
@@ -198,7 +198,7 @@ fn less_than() {
     (print (< 7 6))
     "#,
     );
-    cmd.assert().success().stdout("t\n()\n()\n");
+    cmd.assert().success().stdout("t\nnil\nnil\n");
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn macroexpand_can_expand_a_macro_and_print_it() {
     );
     cmd.assert()
         .success()
-        .stdout("((setq x (lambda () (print wow))))\n");
+        .stdout("((setq x (lambda nil (print wow))))\n");
 }
 
 #[test]
@@ -274,9 +274,26 @@ fn let_can_bind_a_variable() {
     cmd.write_stdin(
         r#"
     (let ((a 1) (b 2)) (print (+ a b)))
-    (print a) ; confirm global a is untouched
-    (print b) ; confirm global b is untouched
+    (print (boundp a)) ; confirm global a is untouched
+    (print (boundp b)) ; confirm global b is untouched
     "#,
     );
-    cmd.assert().success().stdout("3\na\nb\n");
+    cmd.assert().success().stdout("3\nnil\nnil\n");
+}
+
+#[test]
+fn boundp_can_verify_whether_a_variable_is_bound() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (boundp a)) ; For basic values
+    (setq a 1)
+    (print (boundp a))
+    (print (boundp b)) ; and same for Lambdas
+    (setq b (lambda () (print (quote test))))
+    (print (boundp b))
+    "#,
+    );
+    cmd.assert().success().stdout("nil\nt\nnil\nt\n");
 }

@@ -166,7 +166,7 @@ pub fn div(interpreter: &mut Interpreter, mut link: Option<Box<Link>>) -> Value 
 // Example:
 //
 // (error (wow we really don't support strings, huh?))
-pub fn error(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+pub fn error(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("error expects 1 argument".into());
     };
@@ -175,7 +175,9 @@ pub fn error(_interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         return Value::Error("error expects 1 argument".into());
     }
 
-    Value::Error(link.value.to_string())
+    let value = interpreter.evaluate(link.value);
+
+    Value::Error(value.to_string())
 }
 
 // Signature:
@@ -526,14 +528,6 @@ pub fn eval(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     interpreter.evaluate_list(list)
 }
 
-fn cond(cond: bool) -> Value {
-    if cond {
-        Value::Symbol(Symbol::new("t".into()))
-    } else {
-        Value::default()
-    }
-}
-
 pub fn equal(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
         return Value::Error("equal expects 2 arguments".into());
@@ -550,7 +544,7 @@ pub fn equal(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     // TODO:
     // 1. Cast integers into floats if types are cross-compared.
     // 2. Generally improve this check. Equals on function definitions overflows the stack.
-    cond(a.eq(&b))
+    Value::cond(a.eq(&b))
 }
 
 pub fn less(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
@@ -576,7 +570,7 @@ pub fn less(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         }
     };
 
-    cond(result)
+    Value::cond(result)
 }
 
 /// Signature:
@@ -587,7 +581,7 @@ pub fn less(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 /// these without a native implementation for both, but leaving for now.
 pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
-        return cond(true);
+        return Value::t();
     };
 
     let mut result = false;
@@ -600,7 +594,7 @@ pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         }
     }
 
-    cond(result)
+    Value::cond(result)
 }
 
 /// Signature:
@@ -611,7 +605,7 @@ pub fn or(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
 /// these without a native implementation for both, but leaving for now.
 pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
     let Some(link) = link else {
-        return cond(true);
+        return Value::t();
     };
 
     let mut result = true;
@@ -624,7 +618,7 @@ pub fn and(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
         }
     }
 
-    cond(result)
+    Value::cond(result)
 }
 
 /// Signature:
@@ -838,4 +832,29 @@ pub fn let_native(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Val
     interpreter.pop_active_scope();
 
     result
+}
+
+/// Signature:
+///
+/// (boundp (SYMBOL)) -> t | ()
+pub fn boundp(interpreter: &mut Interpreter, link: Option<Box<Link>>) -> Value {
+    let Some(link) = link else {
+        return Value::Error("boundp expects 1 argument".into());
+    };
+
+    if link.next.is_some() {
+        return Value::Error("boundp expects 1 argument".into());
+    }
+
+    let symbol = match link.value {
+        Value::Symbol(symbol) => symbol,
+        _ => {
+            return Value::Error(format!(
+                "boundp expects argument to be a symbol, got: {}",
+                link.value
+            ));
+        }
+    };
+
+    Value::cond(interpreter.read_value(&symbol).is_some())
 }
