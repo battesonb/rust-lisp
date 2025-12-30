@@ -297,3 +297,27 @@ fn boundp_can_verify_whether_a_variable_is_bound() {
     );
     cmd.assert().success().stdout("nil\nt\nnil\nt\n");
 }
+
+#[test]
+fn cons_can_build_a_list() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (cons 3 (cons 2 ())))
+    "#,
+    );
+    cmd.assert().success().stdout("(3 2)\n");
+}
+
+#[test]
+fn cons_can_build_a_pair() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (cons 2 3))
+    "#,
+    );
+    cmd.assert().success().stdout("(2 . 3)\n");
+}

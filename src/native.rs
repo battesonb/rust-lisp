@@ -748,3 +748,23 @@ pub fn boundp(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
 
     Ok(Value::cond(interpreter.read_value(&symbol).is_some()))
 }
+
+/// Signature:
+///
+/// (cons (a b)) -> CONS_CELL
+pub fn cons(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value: a, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: b, rest } = rest.expect_cons_cell()?;
+
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "cons".into(),
+            expected: 2,
+        });
+    }
+
+    let a = interpreter.evaluate(*a)?;
+    let b = interpreter.evaluate(*b)?;
+
+    Ok(Value::ConsCell(ConsCell::new(a).with_rest(b)))
+}

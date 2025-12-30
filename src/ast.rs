@@ -31,10 +31,6 @@ impl ConsCell {
         self
     }
 
-    pub fn with_value(self, value: Value) -> Self {
-        self.with_boxed_value(Box::new(value))
-    }
-
     pub fn with_boxed_rest(mut self, rest: Box<Value>) -> Self {
         self.rest = rest;
         self
@@ -68,7 +64,10 @@ impl ConsCell {
         write!(f, " ")?;
         match self.rest.as_ref() {
             Value::ConsCell(cell) => cell.fmt_inner(f),
-            rest => rest.fmt(f),
+            rest => {
+                write!(f, ". ")?;
+                rest.fmt(f)
+            }
         }
     }
 
