@@ -4,7 +4,9 @@ use crate::{
     ast::{ConsCell, MacroValue, Scope, Symbol, Value},
     lexer::Lexer,
     native::{
-        NativeError, NativeResult, add, and, apply, boundp, car, cdr, cons, defmacro, div, equal, error, eval, if_native, lambda, less, let_native, list, macroexpand, mul, or, print, progn, quote, setq, sub
+        NativeError, NativeResult, add, and, apply, boundp, car, cdr, cond, cons, defmacro, div,
+        equal, error, eval, if_native, lambda, less, let_native, list, macroexpand, mul, or, print,
+        progn, quote, setq, sub,
     },
     parser::Parser,
 };
@@ -43,19 +45,14 @@ impl Interpreter {
 
         let result = match head {
             Value::Symbol(value) => self.evaluate_function(value, *next)?,
-            Value::Function(function) => {
-                apply(
-                    self,
-                    Value::ConsCell(
-                        ConsCell::new(Value::Function(function)).with_rest(Value::ConsCell(
-                            ConsCell::new(Value::ConsCell(
-                                ConsCell::new(Value::Symbol(Symbol::new("list".into())))
-                                    .with_rest(*next),
-                            )),
-                        )),
-                    ),
-                )?
-            }
+            Value::Function(function) => apply(
+                self,
+                Value::ConsCell(ConsCell::new(Value::Function(function)).with_rest(
+                    Value::ConsCell(ConsCell::new(Value::ConsCell(
+                        ConsCell::new(Value::Symbol(Symbol::new("list".into()))).with_rest(*next),
+                    ))),
+                )),
+            )?,
             Value::Macro(MacroValue { params, body }) => {
                 self.evaluate_macro(*next, params, body)?
             }
@@ -126,6 +123,7 @@ impl Interpreter {
             "boundp" => boundp(self, next),
             "car" => car(self, next),
             "cdr" => cdr(self, next),
+            "cond" => cond(self, next),
             "cons" => cons(self, next),
             "defmacro" => defmacro(self, next),
             "error" => error(self, next),

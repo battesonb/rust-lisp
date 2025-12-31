@@ -68,3 +68,10 @@
         (let ((b (car rest))
               (trail (cdr rest)))
           (reduce func_symbol (cons (eval (list func_symbol a b)) trail)))))))
+
+; Gets the nth element from a linked list in O(n) time.
+(defun nth (index lst)
+  (cond ((null lst) nil)
+        ((< index 0) nil)
+        ((= 0 index) (car lst))
+        (t (nth (- index 1) (cdr lst)))))

@@ -572,7 +572,7 @@ pub fn and(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 ///
 /// If is special in that it "short-circuits" the evaluation only to the branch that is followed.
 pub fn if_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: cond, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: test, rest } = rest.expect_cons_cell()?;
     let ConsCell { value: pass, rest } = rest.expect_cons_cell()?;
     let ConsCell { value: fail, rest } = rest.expect_cons_cell()?;
 
@@ -583,10 +583,55 @@ pub fn if_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Val
         });
     }
 
-    let cond = interpreter.evaluate(*cond)?;
-    let cond = cond.is_true();
+    let test = interpreter.evaluate(*test)?;
+    let test = test.is_true();
 
-    interpreter.evaluate(if cond { *pass } else { *fail })
+    interpreter.evaluate(if test { *pass } else { *fail })
+}
+
+/// Signature:
+///
+/// (cond (&args pairs)) -> Value
+///
+/// If is special in that it "short-circuits" the evaluation to the first branch that evaluates to
+/// a non-nil result.
+pub fn cond(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+    loop {
+        if rest.is_nil() {
+            break;
+        }
+
+        let ConsCell {
+            value: pair,
+            rest: trail,
+        } = rest.expect_cons_cell()?;
+
+        let ConsCell {
+            value: test,
+            rest: pair_rest,
+        } = pair.expect_cons_cell()?;
+        let ConsCell {
+            value: action,
+            rest: pair_rest,
+        } = pair_rest.expect_cons_cell()?;
+
+        if !pair_rest.is_nil() {
+            return Err(NativeError::InvalidExactArgumentCount {
+                name: "cond pair".into(),
+                expected: 2,
+            });
+        }
+
+        let test = interpreter.evaluate(*test)?;
+
+        if test.is_true() {
+            return interpreter.evaluate(*action);
+        }
+
+        rest = *trail;
+    }
+
+    Ok(Value::nil())
 }
 
 /// Signature:

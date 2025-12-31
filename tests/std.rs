@@ -125,3 +125,19 @@ fn reduce() {
     );
     cmd.assert().success().stdout("15\n3\nnil\n");
 }
+
+#[test]
+fn nth() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (setq x (list 1 2 3 4 5))
+    (print (nth 0 x)) ; first element
+    (print (nth 3 x)) ; third element
+    (print (nth -1 x)) ; out of bounds
+    (print (nth 6 x)) ; out of bounds
+    "#,
+    );
+    cmd.assert().success().stdout("1\n4\nnil\nnil\n");
+}

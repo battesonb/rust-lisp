@@ -321,3 +321,31 @@ fn cons_can_build_a_pair() {
     );
     cmd.assert().success().stdout("(2 . 3)\n");
 }
+
+#[test]
+fn cond_only_runs_one_branch() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (let ((a 5) (acc 0))
+      (cond ((> a 5) (setq acc (+ acc 1)))
+            ((= a 5) (setq acc (+ acc 1)))
+            (t (setq acc (+ acc 1))))
+      (print acc))
+    "#,
+    );
+    cmd.assert().success().stdout("1\n");
+}
+
+#[test]
+fn cond_nil_on_no_match() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (cond (nil 10)))
+    "#,
+    );
+    cmd.assert().success().stdout("nil\n");
+}
