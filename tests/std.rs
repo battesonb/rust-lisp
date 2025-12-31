@@ -119,11 +119,12 @@ fn reduce() {
     cmd.write_stdin(
         r#"
     (print (reduce (quote +) (list 1 2 3 4 5))) ; sums all values
+    (print (reduce (lambda (a b) (+ a b)) (list 1 2 3 4 5))) ; works with direct lambdas
     (print (reduce (quote +) (list 3))) ; identity for singleton list
     (print (reduce (quote +) nil)) ; nil for empty list
     "#,
     );
-    cmd.assert().success().stdout("15\n3\nnil\n");
+    cmd.assert().success().stdout("15\n15\n3\nnil\n");
 }
 
 #[test]
