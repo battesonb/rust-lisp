@@ -1,5 +1,6 @@
 use core::fmt;
 use std::{
+    borrow::Cow,
     cell::RefCell,
     collections::HashMap,
     fmt::{Display, Write},
@@ -214,8 +215,12 @@ impl NumberValue {
     pub fn add(&self, other: &Self) -> Self {
         match (self, other) {
             (NumberValue::Integer(a), NumberValue::Integer(b)) => NumberValue::Integer(a + b),
-            (NumberValue::Integer(a), NumberValue::Float(b)) => NumberValue::from_f64((*a as f64) + b),
-            (NumberValue::Float(a), NumberValue::Integer(b)) => NumberValue::from_f64(a + (*b as f64)),
+            (NumberValue::Integer(a), NumberValue::Float(b)) => {
+                NumberValue::from_f64((*a as f64) + b)
+            }
+            (NumberValue::Float(a), NumberValue::Integer(b)) => {
+                NumberValue::from_f64(a + (*b as f64))
+            }
             (NumberValue::Float(a), NumberValue::Float(b)) => NumberValue::from_f64(a + b),
         }
     }
@@ -223,8 +228,12 @@ impl NumberValue {
     pub fn sub(&self, other: &Self) -> Self {
         match (self, other) {
             (NumberValue::Integer(a), NumberValue::Integer(b)) => NumberValue::Integer(a - b),
-            (NumberValue::Integer(a), NumberValue::Float(b)) => NumberValue::from_f64((*a as f64) - b),
-            (NumberValue::Float(a), NumberValue::Integer(b)) => NumberValue::from_f64(a - (*b as f64)),
+            (NumberValue::Integer(a), NumberValue::Float(b)) => {
+                NumberValue::from_f64((*a as f64) - b)
+            }
+            (NumberValue::Float(a), NumberValue::Integer(b)) => {
+                NumberValue::from_f64(a - (*b as f64))
+            }
             (NumberValue::Float(a), NumberValue::Float(b)) => NumberValue::from_f64(a - b),
         }
     }
@@ -232,17 +241,27 @@ impl NumberValue {
     pub fn mul(&self, other: &Self) -> Self {
         match (self, other) {
             (NumberValue::Integer(a), NumberValue::Integer(b)) => NumberValue::Integer(a * b),
-            (NumberValue::Integer(a), NumberValue::Float(b)) => NumberValue::from_f64((*a as f64) * b),
-            (NumberValue::Float(a), NumberValue::Integer(b)) => NumberValue::from_f64(a * (*b as f64)),
+            (NumberValue::Integer(a), NumberValue::Float(b)) => {
+                NumberValue::from_f64((*a as f64) * b)
+            }
+            (NumberValue::Float(a), NumberValue::Integer(b)) => {
+                NumberValue::from_f64(a * (*b as f64))
+            }
             (NumberValue::Float(a), NumberValue::Float(b)) => NumberValue::from_f64(a * b),
         }
     }
 
     pub fn div(&self, other: &Self) -> Self {
         match (self, other) {
-            (NumberValue::Integer(a), NumberValue::Integer(b)) => NumberValue::from_f64((*a as f64) / (*b as f64)),
-            (NumberValue::Integer(a), NumberValue::Float(b)) => NumberValue::from_f64((*a as f64) / b),
-            (NumberValue::Float(a), NumberValue::Integer(b)) => NumberValue::from_f64(a / (*b as f64)),
+            (NumberValue::Integer(a), NumberValue::Integer(b)) => {
+                NumberValue::from_f64((*a as f64) / (*b as f64))
+            }
+            (NumberValue::Integer(a), NumberValue::Float(b)) => {
+                NumberValue::from_f64((*a as f64) / b)
+            }
+            (NumberValue::Float(a), NumberValue::Integer(b)) => {
+                NumberValue::from_f64(a / (*b as f64))
+            }
             (NumberValue::Float(a), NumberValue::Float(b)) => NumberValue::from_f64(a / b),
         }
     }
@@ -476,21 +495,26 @@ impl MacroValue {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol {
-    value: String,
+    value: Cow<'static, str>,
 }
 
 impl Symbol {
-    pub fn new(value: String) -> Self {
-        Self { value }
+    pub fn new<S>(value: S) -> Self
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        Self {
+            value: value.into(),
+        }
     }
 
     /// Returns the symbol representing "true".
     pub fn t() -> Self {
-        Symbol::new("t".into())
+        Symbol::new("t")
     }
 
     pub fn as_str(&self) -> &str {
-        self.value.as_str()
+        self.value.as_ref()
     }
 }
 

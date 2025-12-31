@@ -49,7 +49,7 @@ impl Interpreter {
                 self,
                 Value::ConsCell(ConsCell::new(Value::Function(function)).with_rest(
                     Value::ConsCell(ConsCell::new(Value::ConsCell(
-                        ConsCell::new(Value::Symbol(Symbol::new("list".into()))).with_rest(*next),
+                        ConsCell::new(Value::Symbol(Symbol::new("list"))).with_rest(*next),
                     ))),
                 )),
             )?,
