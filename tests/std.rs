@@ -69,3 +69,17 @@ fn assoc() {
     );
     cmd.assert().success().stdout("(3 . 4)\nnil\n");
 }
+
+#[test]
+fn mapcar() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (setq x (list 1 2 3 4 5))
+    (defun double (a) (+ a a))
+    (print (mapcar (quote double) x))
+    "#,
+    );
+    cmd.assert().success().stdout("(2 4 6 8 10)\n");
+}

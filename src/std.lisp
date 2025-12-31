@@ -47,3 +47,12 @@
         (let ((key (car head)))
           (if (= key value) head
             (assoc rest value)))))))
+
+; Define the list map function
+(defun mapcar (func_symbol lst)
+  (if (= lst nil) nil
+    (let ((head (car lst))
+          (rest (cdr lst)))
+      (cons
+        (eval (list func_symbol head))
+        (mapcar func_symbol rest)))))
