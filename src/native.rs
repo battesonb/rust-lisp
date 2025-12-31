@@ -643,6 +643,10 @@ pub fn car(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 ///
 /// (cdr <EXPR>) -> LIST
 pub fn cdr(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    if rest.is_nil() {
+        return Ok(Value::nil());
+    }
+
     let ConsCell { value, rest } = rest.expect_cons_cell()?;
 
     if !rest.is_nil() {

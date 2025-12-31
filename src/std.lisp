@@ -37,3 +37,13 @@
 (defun cddadr (lst) (cdr (cdr (car (cdr lst)))))
 
 (defun cdddar (lst) (cdr (cdr (cdr (car lst)))))
+
+; Define associative array "get" function
+(defun assoc (lst value)
+  (if (= lst nil) nil
+    (let ((head (car lst))
+          (rest (cdr lst)))
+      (if (= head nil) nil
+        (let ((key (car head)))
+          (if (= key value) head
+            (assoc rest value)))))))
