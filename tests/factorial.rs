@@ -6,10 +6,10 @@ fn it_can_calculate_a_factorial() {
 
     cmd.write_stdin(
         r#"
-    (setq fact (lambda (n)
+    (defun fact (n)
         (if (<= n 1)
             1
-            (* n (fact (- n 1))))))
+            (* n (fact (- n 1)))))
     (print (fact 5))
     "#,
     );

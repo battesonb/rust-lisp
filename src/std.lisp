@@ -42,32 +42,34 @@
 
 ; Define associative array "get" function
 (defun assoc (lst value)
-  (if (null lst) nil
-    (let ((head (car lst))
-          (rest (cdr lst)))
-      (if (= head nil) nil
-        (let ((key (car head)))
-          (if (= key value) head
-            (assoc rest value)))))))
+  (if lst
+    (let ((head (car lst)))
+      (if head
+        (if (= (car head) value) head
+          (assoc (cdr lst) value))
+        nil))
+    nil))
 
 ; Define the list map function
 (defun mapcar (func_symbol lst)
-  (if (null lst) nil
-    (let ((head (car lst))
-          (rest (cdr lst)))
-      (cons
-        (eval (list func_symbol head))
-        (mapcar func_symbol rest)))))
+  (if lst
+    (cons
+      (eval (list func_symbol (car lst)))
+      (mapcar func_symbol (cdr lst)))
+    nil))
 
-; Define the list reduce function
-(defun reduce (func_symbol lst)
-  (if (null lst) nil
+; Define the list reduce function. The func parameter can either be a Lambda or a symbol
+; representing a Lambda bound to a variable.
+(defun reduce (func lst)
+  (if lst
     (let ((a (car lst))
           (rest (cdr lst)))
-      (if (null rest) a
+      (if rest
         (let ((b (car rest))
               (trail (cdr rest)))
-          (reduce func_symbol (cons (eval (list func_symbol a b)) trail)))))))
+          (reduce func (cons (eval (list func a b)) trail)))
+        a))
+    nil))
 
 ; Gets the nth element from a linked list in O(n) time.
 (defun nth (index lst)
