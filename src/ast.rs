@@ -212,7 +212,7 @@ impl Value {
 
     /// Returns either the `t` Symbol or the empty list (nil) depending on the provided condition.
     pub fn cond(cond: bool) -> Self {
-        if cond { Self::t() } else { Self::default() }
+        if cond { Self::t() } else { Self::nil() }
     }
 
     /// Returns the symbol representing "true".

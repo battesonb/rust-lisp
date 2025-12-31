@@ -15,3 +15,25 @@
 (defun >= (a b) (not (< a b)))
 (defun > (a b) (not (or (< a b) (= a b))))
 (defun <= (a b) (or (< a b) (= a b)))
+
+; Bootstrap all variants of car and cdr
+(defun caar   (lst) (car (car lst)))
+(defun caaar  (lst) (car (car (car lst))))
+(defun caaaar (lst) (car (car (car (car lst)))))
+
+(defun cddr   (lst) (cdr (cdr lst)))
+(defun cdddr  (lst) (cdr (cdr (cdr lst))))
+(defun cddddr (lst) (cdr (cdr (cdr (cdr lst)))))
+
+(defun cadr   (lst) (car (cdr lst)))
+(defun caddr  (lst) (car (cdr (cdr lst))))
+(defun cadddr (lst) (car (cdr (cdr (cdr lst)))))
+
+(defun cdar   (lst) (cdr (car lst)))
+(defun cdadr  (lst) (cdr (car (cdr lst))))
+(defun cdaddr (lst) (cdr (car (cdr (cdr lst)))))
+
+(defun cddar  (lst) (cdr (cdr (car lst))))
+(defun cddadr (lst) (cdr (cdr (car (cdr lst)))))
+
+(defun cdddar (lst) (cdr (cdr (cdr (car lst)))))
