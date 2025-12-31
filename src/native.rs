@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     ast::{
-        ConsCell, FunctionValue, MacroValue, Scope, Symbol, Value, ValueExpectError,
+        ConsCell, FunctionValue, MacroValue, NumberValue, Scope, Symbol, Value, ValueExpectError,
         ValueExpectResult,
     },
     interpreter::Interpreter,
@@ -44,7 +44,7 @@ pub type NativeResult<T> = Result<T, NativeError>;
 ///
 /// add always returns the value of 0 (the identity) multiplied by all operands.
 pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
-    let mut total = 0.;
+    let mut total = NumberValue::default();
 
     loop {
         if rest.is_nil() {
@@ -55,19 +55,17 @@ pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
-            Value::Integer(value) => value as f64,
-            Value::Float(value) => value,
+            Value::Number(value) => value,
             result => {
                 return Err(NativeError::NumberExpected(result));
             }
         };
-
-        total += result;
+        total = total.add(&result);
 
         rest = *next;
     }
 
-    Ok(Value::number(total))
+    Ok(Value::Number(total))
 }
 
 /// Signature:
@@ -76,7 +74,7 @@ pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 ///
 /// Mul always returns the value of 1 (the identity) multiplied by all operands.
 pub fn mul(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
-    let mut total = 1.;
+    let mut total = NumberValue::Integer(1);
 
     loop {
         if rest.is_nil() {
@@ -87,19 +85,16 @@ pub fn mul(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
-            Value::Integer(value) => value as f64,
-            Value::Float(value) => value,
-            result => {
-                return Err(NativeError::NumberExpected(result));
-            }
+            Value::Number(value) => value,
+            result => Err(NativeError::NumberExpected(result))?,
         };
 
-        total *= result;
+        total = total.mul(&result);
 
         rest = *next;
     }
 
-    Ok(Value::number(total))
+    Ok(Value::Number(total))
 }
 
 /// Signature:
@@ -114,14 +109,13 @@ pub fn sub(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
     let value = interpreter.evaluate(*value)?;
 
     let mut total = match value {
-        Value::Integer(value) => Ok(value as f64),
-        Value::Float(value) => Ok(value),
-        result => Err(NativeError::NumberExpected(result)),
-    }?;
+        Value::Number(value) => value,
+        result => Err(NativeError::NumberExpected(result))?,
+    };
 
     // Single argument is a unary negation operation.
     if next.is_nil() {
-        return Ok(Value::number(-total));
+        return Ok(Value::Number(total.neg()));
     }
 
     rest = *next;
@@ -134,19 +128,16 @@ pub fn sub(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
-            Value::Integer(value) => value as f64,
-            Value::Float(value) => value,
-            result => {
-                return Err(NativeError::NumberExpected(result));
-            }
+            Value::Number(value) => value,
+            result => Err(NativeError::NumberExpected(result))?,
         };
 
-        total -= result;
+        total = total.sub(&result);
 
         rest = *next;
     }
 
-    Ok(Value::number(total))
+    Ok(Value::Number(total))
 }
 
 /// Signature:
@@ -165,14 +156,13 @@ pub fn div(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
     let value = interpreter.evaluate(*value)?;
 
     let mut total = match value {
-        Value::Integer(value) => Ok(value as f64),
-        Value::Float(value) => Ok(value),
-        result => Err(NativeError::NumberExpected(result)),
-    }?;
+        Value::Number(value) => value,
+        result => Err(NativeError::NumberExpected(result))?,
+    };
 
     // Single argument is a unary negation operation.
     if next.is_nil() {
-        return Ok(Value::number(1.0 / total));
+        return Ok(Value::Number(NumberValue::Float(1.0).div(&total)));
     }
 
     rest = *next;
@@ -185,19 +175,16 @@ pub fn div(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
-            Value::Integer(value) => value as f64,
-            Value::Float(value) => value,
-            result => {
-                return Err(NativeError::NumberExpected(result));
-            }
+            Value::Number(value) => value,
+            result => return Err(NativeError::NumberExpected(result))?,
         };
 
-        total /= result;
+        total = total.div(&result);
 
         rest = *next;
     }
 
-    Ok(Value::number(total))
+    Ok(Value::Number(total))
 }
 
 // Example:
@@ -513,10 +500,7 @@ pub fn less(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
     let b = interpreter.evaluate(*b)?;
 
     let result = match (a, b) {
-        (Value::Integer(a), Value::Integer(b)) => a < b,
-        (Value::Float(a), Value::Float(b)) => a < b,
-        (Value::Integer(a), Value::Float(b)) => (a as f64) < b,
-        (Value::Float(a), Value::Integer(b)) => a < (b as f64),
+        (Value::Number(a), Value::Number(b)) => a.less(&b),
         (x, _) => {
             // TODO: Correctly model the wrong type, here.
             return Err(NativeError::NumberExpected(x));

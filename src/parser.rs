@@ -3,7 +3,7 @@ use std::{iter::Peekable, vec::IntoIter};
 use thiserror::Error;
 
 use crate::{
-    ast::{ConsCell, Symbol, Value, ValueExpectError},
+    ast::{ConsCell, NumberValue, Symbol, Value, ValueExpectError},
     token::Token,
 };
 
@@ -80,9 +80,9 @@ impl Parser {
                 }
                 Token::Symbol(symbol) => {
                     let value = if let Ok(value) = symbol.parse::<i64>() {
-                        Value::Integer(value)
+                        Value::Number(NumberValue::Integer(value))
                     } else if let Ok(value) = symbol.parse::<f64>() {
-                        Value::Float(value)
+                        Value::Number(NumberValue::Float(value))
                     } else {
                         Value::symbol(symbol.clone())
                     };
