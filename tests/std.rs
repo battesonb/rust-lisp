@@ -2,6 +2,20 @@
 use assert_cmd::cargo::*;
 
 #[test]
+fn not() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (not t))  ; false
+    (print (not 1))  ; false
+    (print (not ())) ; true
+    "#,
+    );
+    cmd.assert().success().stdout("nil\nnil\nt\n");
+}
+
+#[test]
 fn less_than_or_equal_to() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 
@@ -38,6 +52,20 @@ fn greater_than() {
     (print (> 5 6))
     (print (> 6 6))
     (print (> 7 6))
+    "#,
+    );
+    cmd.assert().success().stdout("nil\nnil\nt\n");
+}
+
+#[test]
+fn null() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (null t))  ; false
+    (print (null 1))  ; false
+    (print (null ())) ; true
     "#,
     );
     cmd.assert().success().stdout("nil\nnil\nt\n");
@@ -82,4 +110,18 @@ fn mapcar() {
     "#,
     );
     cmd.assert().success().stdout("(2 4 6 8 10)\n");
+}
+
+#[test]
+fn reduce() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print (reduce (quote +) (list 1 2 3 4 5))) ; sums all values
+    (print (reduce (quote +) (list 3))) ; identity for singleton list
+    (print (reduce (quote +) nil)) ; nil for empty list
+    "#,
+    );
+    cmd.assert().success().stdout("15\n3\nnil\n");
 }

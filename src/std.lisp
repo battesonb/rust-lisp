@@ -11,6 +11,8 @@
 ; `not` can be defined in terms of if
 (defun not (a) (if a nil t))
 
+(defun null (x) (= nil x))
+
 ; Create all extensions for the `<` and `=` comparisons.
 (defun >= (a b) (not (< a b)))
 (defun > (a b) (not (or (< a b) (= a b))))
@@ -40,7 +42,7 @@
 
 ; Define associative array "get" function
 (defun assoc (lst value)
-  (if (= lst nil) nil
+  (if (null lst) nil
     (let ((head (car lst))
           (rest (cdr lst)))
       (if (= head nil) nil
@@ -50,9 +52,19 @@
 
 ; Define the list map function
 (defun mapcar (func_symbol lst)
-  (if (= lst nil) nil
+  (if (null lst) nil
     (let ((head (car lst))
           (rest (cdr lst)))
       (cons
         (eval (list func_symbol head))
         (mapcar func_symbol rest)))))
+
+; Define the list reduce function
+(defun reduce (func_symbol lst)
+  (if (null lst) nil
+    (let ((a (car lst))
+          (rest (cdr lst)))
+      (if (null rest) a
+        (let ((b (car rest))
+              (trail (cdr rest)))
+          (reduce func_symbol (cons (eval (list func_symbol a b)) trail)))))))
