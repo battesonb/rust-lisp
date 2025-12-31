@@ -51,11 +51,20 @@
     nil))
 
 ; Define the list map function
-(defun mapcar (func_symbol lst)
+(defun mapcar (func lst)
   (if lst
     (cons
-      (eval (list func_symbol (car lst)))
-      (mapcar func_symbol (cdr lst)))
+      (eval (list func (car lst)))
+      (mapcar func (cdr lst)))
+    nil))
+
+; Define the list filter function
+(defun filter (func lst)
+  (if lst
+    (let ((head (car lst)))
+      (if (eval (list func head))
+        (cons head (filter func (cdr lst)))
+        (filter func (cdr lst))))
     nil))
 
 ; Define the list reduce function. The func parameter can either be a Lambda or a symbol

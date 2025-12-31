@@ -142,3 +142,17 @@ fn nth() {
     );
     cmd.assert().success().stdout("1\n4\nnil\nnil\n");
 }
+
+#[test]
+fn filter() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (setq x (list 1 2 3 4 5))
+    (print (filter (lambda (x) (<= x 3)) x)) ; can filter elements
+    (print (filter (lambda (x) (<= x 3)) nil)) ; returns nil on empty list
+    "#,
+    );
+    cmd.assert().success().stdout("(1 2 3)\nnil\n");
+}
