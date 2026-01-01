@@ -186,7 +186,6 @@ pub enum Value {
     ConsCell(ConsCell),
     Symbol(Symbol),
     Number(NumberValue),
-    Error(String),
     Function(FunctionValue),
     Macro(MacroValue),
 }
@@ -307,7 +306,10 @@ pub enum ValueExpectError {
 pub type ValueExpectResult<T> = Result<T, ValueExpectError>;
 
 impl Value {
-    pub fn symbol(symbol: String) -> Self {
+    pub fn symbol<S>(symbol: S) -> Self
+    where
+        S: Into<Cow<'static, str>>,
+    {
         Self::Symbol(Symbol::new(symbol))
     }
 
@@ -333,7 +335,6 @@ impl Value {
     pub fn is_nil(&self) -> bool {
         match self {
             Value::Nil => true,
-            Value::Error(_) => true,
             _ => false,
         }
     }
@@ -396,7 +397,6 @@ impl Display for Value {
             Value::Symbol(symbol) => symbol.fmt(f),
             Value::ConsCell(cell) => cell.fmt(f),
             Value::Number(value) => write!(f, "{value}"),
-            Value::Error(message) => write!(f, "<ERROR: {message}>"),
             Value::Function(FunctionValue { params, body, .. }) => write!(
                 f,
                 "<FUNCTION ({}) {}>",

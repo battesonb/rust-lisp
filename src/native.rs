@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use thiserror::Error;
 
@@ -25,15 +25,15 @@ pub enum NativeError {
     #[error("Invalid function or macro expression, received: {0}")]
     InvalidFunctionExpression(Value),
     #[error("Invalid argument count for {name}, expected {expected}")]
-    InvalidExactArgumentCount { name: String, expected: usize },
+    InvalidExactArgumentCount { name: Cow<'static, str>, expected: usize },
     #[error("Mismatched parameter ({params}) and argument ({arguments}) count for {name}")]
     MismatchedArgumentAndParameterCount {
-        name: String,
+        name: Cow<'static, str>,
         arguments: usize,
         params: usize,
     },
     #[error("{0}")]
-    Generic(String),
+    Generic(Cow<'static, str>),
 }
 
 pub type NativeResult<T> = Result<T, NativeError>;
@@ -202,7 +202,7 @@ pub fn error(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
 
     let value = interpreter.evaluate(*value)?;
 
-    Err(NativeError::Generic(value.to_string()))
+    Err(NativeError::Generic(Cow::Owned(value.to_string())))
 }
 
 // Signature:
