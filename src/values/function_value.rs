@@ -8,14 +8,21 @@ use crate::values::{ConsCell, Scope, Symbol};
 pub struct FunctionValue {
     pub parent_scope: Rc<RefCell<Box<Scope>>>,
     pub params: Vec<Symbol>,
+    pub rest_argument: Option<Symbol>,
     pub body: ConsCell,
 }
 
 impl FunctionValue {
-    pub fn new(parent_scope: Rc<RefCell<Box<Scope>>>, params: Vec<Symbol>, body: ConsCell) -> Self {
+    pub fn new(
+        parent_scope: Rc<RefCell<Box<Scope>>>,
+        params: Vec<Symbol>,
+        body: ConsCell,
+        rest_argument: Option<Symbol>,
+    ) -> Self {
         Self {
             parent_scope,
             params,
+            rest_argument,
             body,
         }
     }

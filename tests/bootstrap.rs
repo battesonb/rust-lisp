@@ -26,3 +26,16 @@ fn native_functions_are_values() {
     );
     cmd.assert().success().stdout("native\n");
 }
+
+#[test]
+fn function_rest_arguments_supported() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (defun printrest (prefix &rest args) (print (cons prefix args)))
+    (printrest (quote prefix) (quote a) (quote b) (quote c))
+    "#,
+    );
+    cmd.assert().success().stdout("(prefix a b c)\n");
+}

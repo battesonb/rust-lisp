@@ -3,9 +3,8 @@ use std::{borrow::Cow, fmt::Display};
 use thiserror::Error;
 
 use crate::values::{
-    FunctionValue, MacroValue, NumberValue, Symbol,
-    cons_cell::ConsCell,
-    native_function_value::{NativeFunction, NativeFunctionValue},
+    FunctionValue, MacroValue, NumberValue, Symbol, cons_cell::ConsCell,
+    native_function_value::NativeFunctionValue,
 };
 
 #[derive(Debug, Clone, Error)]
@@ -126,25 +125,23 @@ impl Display for Value {
             Value::Symbol(symbol) => symbol.fmt(f),
             Value::ConsCell(cell) => cell.fmt(f),
             Value::Number(value) => write!(f, "{value}"),
-            Value::Function(FunctionValue { params, body, .. }) => write!(
+            Value::Function(FunctionValue { params, .. }) => write!(
                 f,
-                "<FUNCTION ({}) {}>",
+                "<FUNCTION ({})>",
                 params
                     .iter()
                     .map(Symbol::as_str)
                     .collect::<Vec<_>>()
                     .join(" "),
-                body
             ),
-            Value::Macro(MacroValue { params, body }) => write!(
+            Value::Macro(MacroValue { params, .. }) => write!(
                 f,
-                "<MACRO ({}) {}>",
+                "<MACRO ({})>",
                 params
                     .iter()
                     .map(Symbol::as_str)
                     .collect::<Vec<_>>()
                     .join(" "),
-                body
             ),
             Value::NativeFunction(NativeFunctionValue { name, .. }) => {
                 write!(f, "<NATIVE_FUNCTION {}>", name)

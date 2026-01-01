@@ -3,11 +3,11 @@ use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 use thiserror::Error;
 
 use crate::{
+    interpreter::Interpreter,
     values::{
         ConsCell, FunctionValue, MacroValue, NumberValue, Scope, Symbol, Value, ValueExpectError,
         ValueExpectResult,
     },
-    interpreter::Interpreter,
 };
 
 #[derive(Clone, Debug, Error)]
@@ -25,7 +25,10 @@ pub enum NativeError {
     #[error("Invalid function or macro expression, received: {0}")]
     InvalidFunctionExpression(Value),
     #[error("Invalid argument count for {name}, expected {expected}")]
-    InvalidExactArgumentCount { name: Cow<'static, str>, expected: usize },
+    InvalidExactArgumentCount {
+        name: Cow<'static, str>,
+        expected: usize,
+    },
     #[error("Mismatched parameter ({params}) and argument ({arguments}) count for {name}")]
     MismatchedArgumentAndParameterCount {
         name: Cow<'static, str>,
@@ -234,14 +237,40 @@ pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
             .collect::<ValueExpectResult<Vec<Symbol>>>()
     }
 
-    let params = params
+    let mut params = params
         .map(|params| params_to_symbols(params))
         .transpose()?
         .unwrap_or_default();
 
+    let rest_argument = {
+        if let Some(rest_index) = params
+            .iter()
+            .enumerate()
+            .find(|(_, symbol)| Symbol::new("&rest").eq(symbol))
+            .map(|(i, _)| i)
+        {
+            if rest_index + 2 != params.len() {
+                return Err(NativeError::Generic(
+                    "rest symbol and argument must be the last symbols in the parameter list".into(),
+                ));
+            }
+
+            let rest_argument = params.pop();
+            params.pop(); // and the rest argument indicator
+            rest_argument
+        } else {
+            None
+        }
+    };
+
     let scope = interpreter.active_scope();
 
-    Ok(Value::Function(FunctionValue::new(scope, params, body)))
+    Ok(Value::Function(FunctionValue::new(
+        scope,
+        params,
+        body,
+        rest_argument,
+    )))
 }
 
 /// Signature:
@@ -364,6 +393,7 @@ pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
         parent_scope,
         params,
         body,
+        rest_argument,
     } = func.expect_function()?;
 
     let args = interpreter.evaluate(*args)?;
@@ -373,7 +403,15 @@ pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
         args.expect_cons_cell()?.into_iter().collect::<Vec<_>>()
     };
 
-    if args.len() != params.len() {
+    if rest_argument.is_some() && args.len() < params.len() {
+        return Err(NativeError::MismatchedArgumentAndParameterCount {
+            name: "apply".into(),
+            params: params.len(),
+            arguments: args.len(),
+        });
+    }
+
+    if rest_argument.is_none() && args.len() != params.len() {
         return Err(NativeError::MismatchedArgumentAndParameterCount {
             name: "apply".into(),
             params: params.len(),
@@ -383,8 +421,19 @@ pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
 
     let scope = Rc::new(RefCell::new(Box::new(Scope::new(Some(parent_scope)))));
     {
+        // TODO: Something less allocation heavy...
+        let (args, rest_arg_values): (Vec<_>, Vec<_>) = args
+            .into_iter()
+            .enumerate()
+            .partition(|(i, _)| *i < params.len());
+
         let mut scope = scope.borrow_mut();
-        for (key, value) in params.into_iter().zip(args) {
+        if let Some(rest_argument) = rest_argument {
+            let rest_arg_list = Value::join(rest_arg_values.into_iter().map(|(_, v)| v));
+            scope.insert(rest_argument, rest_arg_list);
+        }
+
+        for (key, (_, value)) in params.into_iter().zip(args) {
             scope.insert(key, value);
         }
     }
