@@ -40,10 +40,7 @@ impl Interpreter {
     pub fn evaluate_list(&mut self, cell: ConsCell) -> NativeResult<Value> {
         let ConsCell { value, rest: next } = cell;
 
-        let head = match *value {
-            Value::Symbol(symbol) => self.read_value(&symbol).unwrap_or(Value::Symbol(symbol)),
-            head => head,
-        };
+        let head = self.evaluate(*value)?;
 
         let result = match head {
             Value::Symbol(value) => Err(NativeError::UndefinedVariable(value))?,
@@ -149,22 +146,30 @@ impl Interpreter {
         }
     }
 
-    pub(crate) fn set_value(&mut self, symbol: Symbol, value: Value) {
+    pub(crate) fn set_value(&mut self, symbol: Symbol, value: Value) -> NativeResult<()> {
         let mut current_scope = Some(self.active_scope());
+
+        if self.native_functions.contains_key(&symbol.as_cow()) {
+            return Err(NativeError::Generic(
+                "Symbol representing native function may not be set".into(),
+            ));
+        }
 
         while let Some(scope) = current_scope {
             let mut scope = scope.borrow_mut();
             if scope.get(&symbol).is_some() {
                 scope.insert(symbol, value);
-                return;
+                return Ok(());
             }
             current_scope = scope.parent_scope();
         }
 
         self.set_global_value(symbol, value);
+
+        Ok(())
     }
 
-    pub(crate) fn set_global_value(&mut self, symbol: Symbol, value: Value) {
+    fn set_global_value(&mut self, symbol: Symbol, value: Value) {
         let scope = self
             .active_scope_stack
             .first()

@@ -360,7 +360,7 @@ pub fn defmacro(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Valu
     let params = params_to_symbols(*params)?;
     let value = Value::Macro(MacroValue::new(params, body));
 
-    interpreter.set_value(symbol.clone(), value);
+    interpreter.set_value(symbol.clone(), value)?;
 
     Ok(Value::Symbol(symbol))
 }
@@ -484,7 +484,7 @@ pub fn setq(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Valu
 
         let value = interpreter.evaluate(*next_value)?;
 
-        interpreter.set_value(symbol, value.clone());
+        interpreter.set_value(symbol, value.clone())?;
 
         last_value = Some(value);
         rest = *next_rest;

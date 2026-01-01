@@ -228,6 +228,18 @@ fn lambda_can_be_defined_and_called_directly() {
 }
 
 #[test]
+fn lambda_can_be_called_directly() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print ((lambda (a) (+ a a)) 10))
+    "#,
+    );
+    cmd.assert().success().stdout("20\n");
+}
+
+#[test]
 fn lambda_body_is_rest_arguments() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 
