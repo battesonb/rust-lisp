@@ -5,6 +5,7 @@ mod function_value;
 mod scope;
 mod macro_value;
 mod symbol;
+mod native_function_value;
 
 pub use value::*;
 pub use cons_cell::*;
@@ -13,3 +14,4 @@ pub use function_value::*;
 pub use scope::*;
 pub use macro_value::*;
 pub use symbol::*;
+pub use native_function_value::*;

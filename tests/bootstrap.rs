@@ -13,3 +13,16 @@ fn message_can_print() {
     );
     cmd.assert().success().stdout("success\n");
 }
+
+#[test]
+fn native_functions_are_values() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (setq p print)
+    (p (quote native))
+    "#,
+    );
+    cmd.assert().success().stdout("native\n");
+}

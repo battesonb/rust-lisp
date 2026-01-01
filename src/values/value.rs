@@ -2,7 +2,11 @@ use std::{borrow::Cow, fmt::Display};
 
 use thiserror::Error;
 
-use crate::values::{cons_cell::ConsCell, FunctionValue, MacroValue, NumberValue, Symbol};
+use crate::values::{
+    FunctionValue, MacroValue, NumberValue, Symbol,
+    cons_cell::ConsCell,
+    native_function_value::{NativeFunction, NativeFunctionValue},
+};
 
 #[derive(Debug, Clone, Error)]
 pub enum ValueExpectError {
@@ -26,6 +30,7 @@ pub enum Value {
     Symbol(Symbol),
     Number(NumberValue),
     Function(FunctionValue),
+    NativeFunction(NativeFunctionValue),
     Macro(MacroValue),
 }
 
@@ -141,6 +146,9 @@ impl Display for Value {
                     .join(" "),
                 body
             ),
+            Value::NativeFunction(NativeFunctionValue { name, .. }) => {
+                write!(f, "<NATIVE_FUNCTION {}>", name)
+            }
         }
     }
 }

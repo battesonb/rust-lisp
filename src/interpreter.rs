@@ -1,7 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    values::{ConsCell, MacroValue, Scope, Symbol, Value},
     lexer::Lexer,
     native::{
         NativeError, NativeResult, add, and, apply, boundp, car, cdr, cond, cons, defmacro, div,
@@ -9,10 +8,12 @@ use crate::{
         progn, quote, setq, sub,
     },
     parser::Parser,
+    values::{ConsCell, MacroValue, NativeFunction, NativeFunctionValue, Scope, Symbol, Value},
 };
 
 pub struct Interpreter {
     active_scope_stack: Vec<Rc<RefCell<Box<Scope>>>>,
+    native_functions: HashMap<Cow<'static, str>, NativeFunction>,
 }
 
 impl Interpreter {
@@ -20,6 +21,7 @@ impl Interpreter {
         let root_scope = Rc::new(RefCell::new(Box::new(Scope::default())));
         Self {
             active_scope_stack: vec![root_scope],
+            native_functions: build_native_function_map(),
         }
     }
 
@@ -44,7 +46,7 @@ impl Interpreter {
         };
 
         let result = match head {
-            Value::Symbol(value) => self.evaluate_function(value, *next)?,
+            Value::Symbol(value) => Err(NativeError::UndefinedVariable(value))?,
             Value::Function(function) => apply(
                 self,
                 Value::ConsCell(ConsCell::new(Value::Function(function)).with_rest(
@@ -56,6 +58,7 @@ impl Interpreter {
             Value::Macro(MacroValue { params, body }) => {
                 self.evaluate_macro(*next, params, body)?
             }
+            Value::NativeFunction(NativeFunctionValue { func, .. }) => func(self, *next)?,
             _ => Err(NativeError::InvalidFunctionExpression(head))?,
         };
 
@@ -110,47 +113,24 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_function(&mut self, function: Symbol, next: Value) -> NativeResult<Value> {
-        match function.as_str() {
-            "+" => add(self, next),
-            "*" => mul(self, next),
-            "-" => sub(self, next),
-            "/" => div(self, next),
-            "=" => equal(self, next),
-            "<" => less(self, next),
-            "and" => and(self, next),
-            "apply" => apply(self, next),
-            "boundp" => boundp(self, next),
-            "car" => car(self, next),
-            "cdr" => cdr(self, next),
-            "cond" => cond(self, next),
-            "cons" => cons(self, next),
-            "defmacro" => defmacro(self, next),
-            "error" => error(self, next),
-            "eval" => eval(self, next),
-            "if" => if_native(self, next),
-            "lambda" => lambda(self, next),
-            "let" => let_native(self, next),
-            "list" => list(self, next),
-            "macroexpand" => macroexpand(self, next),
-            "or" => or(self, next),
-            "print" => print(self, next),
-            "progn" => progn(self, next),
-            "quote" => quote(self, next),
-            "setq" => setq(self, next),
-            _ => Err(NativeError::UnresolvedFunction(function)),
-        }
-    }
-
     pub(crate) fn read_value(&self, symbol: &Symbol) -> Option<Value> {
         let mut current_scope = Some(self.active_scope());
 
+        // Look for values in scope
         while let Some(scope) = current_scope {
             let scope = scope.borrow();
             if let Some(value) = scope.get(symbol) {
                 return Some(value.clone()); // Huge footgun, this should not be cloned...
             }
             current_scope = scope.parent_scope();
+        }
+
+        // Look for native functions
+        if let Some(native_func) = self.native_functions.get(&symbol.as_cow()) {
+            return Some(Value::NativeFunction(NativeFunctionValue {
+                name: symbol.as_cow(),
+                func: *native_func,
+            }));
         }
 
         None
@@ -212,4 +192,35 @@ impl Interpreter {
     pub(crate) fn push_active_scope(&mut self, scope: Rc<RefCell<Box<Scope>>>) {
         self.active_scope_stack.push(scope);
     }
+}
+
+fn build_native_function_map() -> HashMap<Cow<'static, str>, NativeFunction> {
+    let mut map: HashMap<Cow<'static, str>, NativeFunction> = HashMap::new();
+    map.insert("+".into(), add);
+    map.insert("*".into(), mul);
+    map.insert("-".into(), sub);
+    map.insert("/".into(), div);
+    map.insert("=".into(), equal);
+    map.insert("<".into(), less);
+    map.insert("and".into(), and);
+    map.insert("apply".into(), apply);
+    map.insert("boundp".into(), boundp);
+    map.insert("car".into(), car);
+    map.insert("cdr".into(), cdr);
+    map.insert("cond".into(), cond);
+    map.insert("cons".into(), cons);
+    map.insert("defmacro".into(), defmacro);
+    map.insert("error".into(), error);
+    map.insert("eval".into(), eval);
+    map.insert("if".into(), if_native);
+    map.insert("lambda".into(), lambda);
+    map.insert("let".into(), let_native);
+    map.insert("list".into(), list);
+    map.insert("macroexpand".into(), macroexpand);
+    map.insert("or".into(), or);
+    map.insert("print".into(), print);
+    map.insert("progn".into(), progn);
+    map.insert("quote".into(), quote);
+    map.insert("setq".into(), setq);
+    map
 }

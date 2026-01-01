@@ -20,6 +20,10 @@ impl Symbol {
         Symbol::new("t")
     }
 
+    pub fn as_cow(&self) -> Cow<'static, str> {
+        self.value.clone()
+    }
+
     pub fn as_str(&self) -> &str {
         self.value.as_ref()
     }
