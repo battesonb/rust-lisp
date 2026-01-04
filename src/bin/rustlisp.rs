@@ -10,7 +10,13 @@ fn main() {
         .unwrap()
         .join("\n");
     let lexer = Lexer::new(&lines);
-    let tokens = lexer.lex();
+    let tokens = match lexer.lex() {
+        Ok(s) => s,
+        Err(e) => {
+            println!("{}", e.to_string());
+            std::process::exit(1);
+        }
+    };
     let parser = Parser::new(tokens);
     let statements = match parser.parse() {
         Ok(s) => s,

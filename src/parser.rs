@@ -3,8 +3,8 @@ use std::{iter::Peekable, vec::IntoIter};
 use thiserror::Error;
 
 use crate::{
-    values::{ConsCell, NumberValue, Symbol, Value, ValueExpectError},
     token::Token,
+    values::{ConsCell, NumberValue, Symbol, Value, ValueExpectError},
 };
 
 #[derive(Error, Debug)]
@@ -46,6 +46,10 @@ impl Parser {
                 Token::RParen => {
                     return Err(ParseError::UnexpectedRParen);
                 }
+                Token::String(value) => {
+                    lists.push(Value::String(value.clone()));
+                    self.tokens.next();
+                },
             }
         }
 
@@ -78,6 +82,22 @@ impl Parser {
                         prev_cell = list.as_mut();
                     }
                 }
+                Token::String(value) => {
+                    let value = Value::String(value.clone());
+
+                    let new_cell = ConsCell::new(value);
+
+                    if let Some(prev) = prev_cell {
+                        prev.rest = Box::new(Value::ConsCell(new_cell));
+                        prev_cell = Some(prev.rest.expect_cons_cell_mut()?);
+                    } else {
+                        list = Some(new_cell);
+                        prev_cell = list.as_mut();
+                    }
+
+                    // Drop the string
+                    self.tokens.next();
+                },
                 Token::Symbol(symbol) => {
                     let value = if let Ok(value) = symbol.parse::<i64>() {
                         Value::Number(NumberValue::Integer(value))

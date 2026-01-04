@@ -26,6 +26,7 @@ pub enum Value {
     #[default]
     Nil,
     ConsCell(ConsCell),
+    String(String),
     Symbol(Symbol),
     Number(NumberValue),
     Function(FunctionValue),
@@ -146,6 +147,7 @@ impl Display for Value {
             Value::NativeFunction(NativeFunctionValue { name, .. }) => {
                 write!(f, "<NATIVE_FUNCTION {}>", name)
             }
+            Value::String(value) => write!(f, "\"{value}\""),
         }
     }
 }

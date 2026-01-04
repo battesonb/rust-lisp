@@ -3,7 +3,7 @@
 use assert_cmd::cargo::*;
 
 #[test]
-fn message_can_print() {
+fn message_can_print_symbol() {
     let mut cmd = cargo_bin_cmd!("rustlisp");
 
     cmd.write_stdin(
@@ -12,6 +12,18 @@ fn message_can_print() {
     "#,
     );
     cmd.assert().success().stdout("success\n");
+}
+
+#[test]
+fn message_can_print_string() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+    (print "success")
+    "#,
+    );
+    cmd.assert().success().stdout("\"success\"\n");
 }
 
 #[test]

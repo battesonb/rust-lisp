@@ -34,7 +34,13 @@ fn main() -> rustyline::Result<()> {
 
         let _ = rl.add_history_entry(&line);
         let lexer = Lexer::new(&line);
-        let tokens = lexer.lex();
+        let tokens = match lexer.lex() {
+            Ok(s) => s,
+            Err(e) => {
+                println!("{}", e.to_string());
+                continue;
+            }
+        };
         let parser = Parser::new(tokens);
         let statements = match parser.parse() {
             Ok(s) => s,

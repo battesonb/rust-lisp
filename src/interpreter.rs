@@ -135,7 +135,7 @@ impl Interpreter {
 
     pub fn load_std(&mut self) {
         let lexer = Lexer::new(include_str!("std.lisp"));
-        let tokens = lexer.lex();
+        let tokens = lexer.lex().expect("Failed to lex std");
         let parser = Parser::new(tokens);
         let statements = parser
             .parse()
