@@ -1,17 +1,19 @@
-mod value;
 mod cons_cell;
-mod number_value;
 mod function_value;
-mod scope;
+mod hash_table_value;
 mod macro_value;
-mod symbol;
 mod native_function_value;
+mod number_value;
+mod scope;
+mod symbol;
+mod value;
 
-pub use value::*;
 pub use cons_cell::*;
-pub use number_value::*;
 pub use function_value::*;
-pub use scope::*;
+pub use hash_table_value::*;
 pub use macro_value::*;
-pub use symbol::*;
 pub use native_function_value::*;
+pub use number_value::*;
+pub use scope::*;
+pub use symbol::*;
+pub use value::*;

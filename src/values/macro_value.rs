@@ -1,6 +1,6 @@
 use crate::values::{ConsCell, Symbol};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MacroValue {
     pub params: Vec<Symbol>,
     pub body: ConsCell,
@@ -11,4 +11,3 @@ impl MacroValue {
         Self { params, body }
     }
 }
-

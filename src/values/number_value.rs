@@ -1,10 +1,24 @@
-use std::fmt::Display;
+use std::{fmt::Display, hash::Hash};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NumberValue {
     Integer(i64),
     Float(f64),
 }
+
+impl Hash for NumberValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            NumberValue::Integer(v) => v.hash(state),
+            NumberValue::Float(_) => {
+                panic!("Hash is not supported for float values");
+            }
+        }
+    }
+}
+
+impl Eq for NumberValue {}
 
 impl Default for NumberValue {
     fn default() -> Self {
@@ -100,4 +114,3 @@ impl Display for NumberValue {
         }
     }
 }
-

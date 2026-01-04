@@ -49,7 +49,7 @@ impl Parser {
                 Token::String(value) => {
                     lists.push(Value::String(value.clone()));
                     self.tokens.next();
-                },
+                }
             }
         }
 
@@ -97,7 +97,7 @@ impl Parser {
 
                     // Drop the string
                     self.tokens.next();
-                },
+                }
                 Token::Symbol(symbol) => {
                     let value = if let Ok(value) = symbol.parse::<i64>() {
                         Value::Number(NumberValue::Integer(value))

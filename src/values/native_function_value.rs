@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Debug};
+use std::{borrow::Cow, fmt::Debug, hash::Hash};
 
 use crate::{interpreter::Interpreter, native::NativeResult, values::Value};
 
@@ -14,6 +14,15 @@ impl PartialEq for NativeFunctionValue {
     fn eq(&self, other: &Self) -> bool {
         // We assume that no two native functions have the same name.
         self.name == other.name
+    }
+}
+
+impl Eq for NativeFunctionValue {}
+
+impl Hash for NativeFunctionValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let address = (self) as *const NativeFunctionValue as usize;
+        address.hash(state);
     }
 }
 

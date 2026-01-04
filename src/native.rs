@@ -5,8 +5,8 @@ use thiserror::Error;
 use crate::{
     interpreter::Interpreter,
     values::{
-        ConsCell, FunctionValue, MacroValue, NumberValue, Scope, Symbol, Value, ValueExpectError,
-        ValueExpectResult,
+        ConsCell, FunctionValue, HashTableValue, MacroValue, NumberValue, Scope, Symbol, Value,
+        ValueExpectError, ValueExpectResult,
     },
 };
 
@@ -251,7 +251,8 @@ pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
         {
             if rest_index + 2 != params.len() {
                 return Err(NativeError::Generic(
-                    "rest symbol and argument must be the last symbols in the parameter list".into(),
+                    "rest symbol and argument must be the last symbols in the parameter list"
+                        .into(),
                 ));
             }
 
@@ -849,4 +850,52 @@ pub fn cons(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
     let b = interpreter.evaluate(*b)?;
 
     Ok(Value::ConsCell(ConsCell::new(a).with_rest(b)))
+}
+
+pub fn make_hash_table(_interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    rest.expect_nil()?;
+
+    Ok(Value::HashTable(HashTableValue::default()))
+}
+
+pub fn gethash(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value: table, rest } = rest.expect_cons_cell()?;
+
+    let table = interpreter.evaluate(*table)?;
+    let table = table.expect_hash_table()?;
+
+    let key = rest.expect_cons_cell()?;
+    let key = interpreter.evaluate(*key.value)?;
+
+    let Some(value) = table.get(&key) else {
+        return Err(NativeError::Generic(
+            format!("Failed to retrieve value from hash map for key {key}").into(),
+        ));
+    };
+
+    Ok(value.clone())
+}
+
+pub fn sethash(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value: table, rest } = rest.expect_cons_cell()?;
+
+    let table = interpreter.evaluate(*table)?;
+    let mut table = table.expect_hash_table()?;
+
+    let ConsCell { value: key, rest } = rest.expect_cons_cell()?;
+    let key = interpreter.evaluate(*key)?;
+
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+    let value = interpreter.evaluate(*value)?;
+
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "sethash".into(),
+            expected: 3,
+        });
+    }
+
+    table.insert(key, value);
+
+    Ok(Value::Nil)
 }

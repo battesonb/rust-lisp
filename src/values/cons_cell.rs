@@ -2,7 +2,7 @@ use std::fmt::{Display, Write};
 
 use crate::values::value::{Value, ValueIntoIter};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ConsCell {
     pub value: Box<Value>,
     pub rest: Box<Value>,
@@ -103,4 +103,3 @@ impl Display for ConsCell {
         Ok(())
     }
 }
-

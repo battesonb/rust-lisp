@@ -4,8 +4,8 @@ use crate::{
     lexer::Lexer,
     native::{
         NativeError, NativeResult, add, and, apply, boundp, car, cdr, cond, cons, defmacro, div,
-        equal, error, eval, if_native, lambda, less, let_native, list, macroexpand, mul, or, print,
-        progn, quote, setq, sub,
+        equal, error, eval, gethash, if_native, lambda, less, let_native, list, macroexpand,
+        make_hash_table, mul, or, print, progn, quote, sethash, setq, sub,
     },
     parser::Parser,
     values::{ConsCell, MacroValue, NativeFunction, NativeFunctionValue, Scope, Symbol, Value},
@@ -227,5 +227,8 @@ fn build_native_function_map() -> HashMap<Cow<'static, str>, NativeFunction> {
     map.insert("progn".into(), progn);
     map.insert("quote".into(), quote);
     map.insert("setq".into(), setq);
+    map.insert("make-hash-table".into(), make_hash_table);
+    map.insert("gethash".into(), gethash);
+    map.insert("sethash".into(), sethash);
     map
 }

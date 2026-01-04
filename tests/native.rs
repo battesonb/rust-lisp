@@ -361,3 +361,17 @@ fn cond_nil_on_no_match() {
     );
     cmd.assert().success().stdout("nil\n");
 }
+
+#[test]
+fn make_hash_table_get_and_set() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+        (setq x (make-hash-table))
+        (sethash x (quote foo) (quote bar))
+        (print (gethash x (quote foo)))
+    "#,
+    );
+    cmd.assert().success().stdout("bar\n");
+}

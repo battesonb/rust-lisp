@@ -43,4 +43,3 @@ impl Scope {
         self.map.get(key)
     }
 }
-

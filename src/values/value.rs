@@ -3,12 +3,14 @@ use std::{borrow::Cow, fmt::Display};
 use thiserror::Error;
 
 use crate::values::{
-    FunctionValue, MacroValue, NumberValue, Symbol, cons_cell::ConsCell,
+    FunctionValue, HashTableValue, MacroValue, NumberValue, Symbol, cons_cell::ConsCell,
     native_function_value::NativeFunctionValue,
 };
 
 #[derive(Debug, Clone, Error)]
 pub enum ValueExpectError {
+    #[error("Expected nil, received: {0}")]
+    ExpectedNil(Value),
     #[error("Expected non-empty list, received: {0}")]
     ExpectedNonEmptyList(Value),
     #[error("Expected symbol, received: {0}")]
@@ -17,11 +19,13 @@ pub enum ValueExpectError {
     ExpectedMacro(Value),
     #[error("Expected function reference, received: {0}")]
     ExpectedFunction(Value),
+    #[error("Expected hash table, received: {0}")]
+    ExpectedHashTable(Value),
 }
 
 pub type ValueExpectResult<T> = Result<T, ValueExpectError>;
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
     #[default]
     Nil,
@@ -32,6 +36,7 @@ pub enum Value {
     Function(FunctionValue),
     NativeFunction(NativeFunctionValue),
     Macro(MacroValue),
+    HashTable(HashTableValue),
 }
 
 impl Value {
@@ -68,6 +73,13 @@ impl Value {
         }
     }
 
+    pub fn expect_nil(self) -> ValueExpectResult<()> {
+        match self {
+            Value::Nil => Ok(()),
+            _ => Err(ValueExpectError::ExpectedNil(self)),
+        }
+    }
+
     pub fn expect_cons_cell(self) -> ValueExpectResult<ConsCell> {
         match self {
             Value::ConsCell(cons_cell) => Ok(cons_cell),
@@ -100,6 +112,13 @@ impl Value {
         match self {
             Value::Macro(macro_value) => Ok(macro_value),
             _ => Err(ValueExpectError::ExpectedMacro(self)),
+        }
+    }
+
+    pub fn expect_hash_table(self) -> ValueExpectResult<HashTableValue> {
+        match self {
+            Value::HashTable(table) => Ok(table),
+            _ => Err(ValueExpectError::ExpectedHashTable(self)),
         }
     }
 
@@ -145,9 +164,10 @@ impl Display for Value {
                     .join(" "),
             ),
             Value::NativeFunction(NativeFunctionValue { name, .. }) => {
-                write!(f, "<NATIVE_FUNCTION {}>", name)
+                write!(f, "<NATIVE-FUNCTION {}>", name)
             }
             Value::String(value) => write!(f, "\"{value}\""),
+            Value::HashTable(_) => write!(f, "<HASH-TABLE>"),
         }
     }
 }
