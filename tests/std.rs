@@ -156,3 +156,42 @@ fn filter() {
     );
     cmd.assert().success().stdout("(1 2 3)\nnil\n");
 }
+
+#[test]
+fn typep_returns_t_if_correct() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+        (print (typep nil (quote null)))
+        (print (typep (list 1 2 3) (quote cons)))
+        (print (typep "foo" (quote string)))
+        (print (typep (quote foo) (quote symbol)))
+        (print (typep 1 (quote number)))
+        (print (typep (lambda () nil) (quote function)))
+        (print (typep setq (quote native-function)))
+        (print (typep defun (quote macro)))
+        (print (typep (make-hash-table) (quote hash-table)))
+    "#,
+    );
+    cmd.assert().success().stdout("t\nt\nt\nt\nt\nt\nt\nt\nt\n");
+}
+#[test]
+fn typep_returns_nil_if_incorrect() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+        (print (typep nil (quote string)))
+        (print (typep (list 1 2 3) (quote null)))
+        (print (typep "foo" (quote null)))
+        (print (typep (quote null) (quote null)))
+        (print (typep 1 (quote null)))
+        (print (typep (lambda () nil) (quote null)))
+        (print (typep setq (quote null)))
+        (print (typep defun (quote null)))
+        (print (typep (make-hash-table) (quote null)))
+    "#,
+    );
+    cmd.assert().success().stdout("nil\nnil\nnil\nnil\nnil\nnil\nnil\nnil\nnil\n");
+}

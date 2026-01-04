@@ -5,7 +5,7 @@ use crate::{
     native::{
         NativeError, NativeResult, add, and, apply, boundp, car, cdr, cond, cons, defmacro, div,
         equal, error, eval, gethash, if_native, lambda, less, let_native, list, macroexpand,
-        make_hash_table, mul, or, print, progn, quote, sethash, setq, sub,
+        make_hash_table, mul, or, print, progn, quote, sethash, setq, sub, type_of,
     },
     parser::Parser,
     values::{ConsCell, MacroValue, NativeFunction, NativeFunctionValue, Scope, Symbol, Value},
@@ -230,5 +230,6 @@ fn build_native_function_map() -> HashMap<Cow<'static, str>, NativeFunction> {
     map.insert("make-hash-table".into(), make_hash_table);
     map.insert("gethash".into(), gethash);
     map.insert("sethash".into(), sethash);
+    map.insert("type-of".into(), type_of);
     map
 }

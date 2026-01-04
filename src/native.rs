@@ -899,3 +899,17 @@ pub fn sethash(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value
 
     Ok(Value::Nil)
 }
+
+pub fn type_of(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+
+    if !rest.is_nil() {
+        return Err(NativeError::InvalidExactArgumentCount {
+            name: "typep".into(),
+            expected: 1,
+        });
+    }
+    let value = interpreter.evaluate(*value)?;
+
+    Ok(Value::Symbol(value.type_of()))
+}

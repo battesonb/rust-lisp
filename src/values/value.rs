@@ -73,6 +73,23 @@ impl Value {
         }
     }
 
+    pub fn type_of(&self) -> Symbol {
+        let symbol = match self {
+            // Type of nil is `null`, to avoid a cyclical definition
+            Value::Nil => "null",
+            Value::ConsCell(_) => "cons",
+            Value::String(_) => "string",
+            Value::Symbol(_) => "symbol",
+            Value::Number(_) => "number",
+            Value::Function(_) => "function",
+            Value::NativeFunction(_) => "native-function",
+            Value::Macro(_) => "macro",
+            Value::HashTable(_) => "hash-table",
+        };
+
+        Symbol::new(symbol)
+    }
+
     pub fn expect_nil(self) -> ValueExpectResult<()> {
         match self {
             Value::Nil => Ok(()),

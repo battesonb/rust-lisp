@@ -86,3 +86,7 @@
         ((< index 0) nil)
         ((= 0 index) (car lst))
         (t (nth (- index 1) (cdr lst)))))
+
+; Type predicate, checks if a value matches a given type
+(defun typep (value type)
+  (= (type-of value) type))

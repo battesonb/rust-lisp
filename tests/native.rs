@@ -375,3 +375,23 @@ fn make_hash_table_get_and_set() {
     );
     cmd.assert().success().stdout("bar\n");
 }
+
+#[test]
+fn type_of_works() {
+    let mut cmd = cargo_bin_cmd!("rustlisp");
+
+    cmd.write_stdin(
+        r#"
+        (print (type-of nil))
+        (print (type-of (list 1 2 3)))
+        (print (type-of "foo"))
+        (print (type-of (quote foo)))
+        (print (type-of 1))
+        (print (type-of (lambda () nil)))
+        (print (type-of setq))
+        (print (type-of defun))
+        (print (type-of (make-hash-table)))
+    "#,
+    );
+    cmd.assert().success().stdout("null\ncons\nstring\nsymbol\nnumber\nfunction\nnative-function\nmacro\nhash-table\n");
+}
