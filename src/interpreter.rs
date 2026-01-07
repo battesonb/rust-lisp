@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Clone, Debug, Error)]
 pub struct InterpreterError {
-    pub stack: Vec<Value>,
+    pub stack: Vec<(Value, Value)>,
     pub message: String,
 }
 
@@ -24,8 +24,8 @@ impl Display for InterpreterError {
         writeln!(f, "ERROR: {}", self.message)?;
         if self.stack.len() > 1 {
             writeln!(f, "TRACE:")?;
-            for (i, context) in self.stack.iter().enumerate() {
-                writeln!(f, "{}. {}", i + 1, context)?;
+            for (i, (prior_context, post_context)) in self.stack.iter().enumerate() {
+                writeln!(f, "{}. {} {}", i + 1, prior_context, post_context)?;
             }
         }
         Ok(())
@@ -55,7 +55,9 @@ pub trait IntoInterpreterResult<T> {
 }
 
 pub struct Interpreter {
-    context_stack: Vec<Value>,
+    /// First value is before evaluation, second value is after evaluation. This is a great way for
+    /// determining names of normally anonymous functions.
+    context_stack: Vec<(Value, Value)>,
     active_scope_stack: Vec<Rc<RefCell<Box<Scope>>>>,
     native_functions: HashMap<Cow<'static, str>, Value>,
 }
@@ -86,10 +88,11 @@ impl Interpreter {
     pub fn evaluate_list(&mut self, cell: ConsCell) -> InterpreterResult<Value> {
         let ConsCell { value, rest: next } = cell;
 
-        let head = self.evaluate(*value)?;
+        let prior = *value;
+        let head = self.evaluate(prior.clone())?;
 
         // Potentially quite expensive... Values should likely always be Rc<RefCell<...>> types.
-        self.context_stack.push(head.clone());
+        self.context_stack.push((prior, head.clone()));
 
         let result = match head {
             Value::Symbol(value) => {
@@ -254,7 +257,7 @@ impl Interpreter {
         self.active_scope_stack.push(scope);
     }
 
-    pub(crate) fn context_stack(&self) -> &Vec<Value> {
+    pub(crate) fn context_stack(&self) -> &Vec<(Value, Value)> {
         &self.context_stack
     }
 }

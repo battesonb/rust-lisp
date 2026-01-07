@@ -42,9 +42,9 @@ fn it_use_stateful_functions_to_simulate_objects() {
     );
     cmd.assert().success().stdout("100\n70\n70\n").stderr(r#"ERROR: "unexpected operation"
 TRACE:
-1. <NATIVE-FUNCTION print>
-2. <FUNCTION (operation)>
-3. <NATIVE-FUNCTION cond>
-4. <NATIVE-FUNCTION error>
+1. print <NATIVE-FUNCTION print>
+2. account <FUNCTION (operation)>
+3. cond <NATIVE-FUNCTION cond>
+4. error <NATIVE-FUNCTION error>
 "#);
 }

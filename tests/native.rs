@@ -161,7 +161,7 @@ fn error_constructs_a_raw_error() {
     "#,
     );
     cmd.assert().success().stderr(
-        "ERROR: failure\nTRACE:\n1. <NATIVE-FUNCTION print>\n2. <NATIVE-FUNCTION error>\n",
+        "ERROR: failure\nTRACE:\n1. print <NATIVE-FUNCTION print>\n2. error <NATIVE-FUNCTION error>\n",
     );
 }
 
