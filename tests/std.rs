@@ -193,5 +193,7 @@ fn typep_returns_nil_if_incorrect() {
         (print (typep (make-hash-table) (quote null)))
     "#,
     );
-    cmd.assert().success().stdout("nil\nnil\nnil\nnil\nnil\nnil\nnil\nnil\nnil\n");
+    cmd.assert()
+        .success()
+        .stdout("nil\nnil\nnil\nnil\nnil\nnil\nnil\nnil\nnil\n");
 }

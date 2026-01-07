@@ -13,7 +13,7 @@ fn main() {
     let tokens = match lexer.lex() {
         Ok(s) => s,
         Err(e) => {
-            println!("{}", e.to_string());
+            eprintln!("{}", e.to_string());
             std::process::exit(1);
         }
     };
@@ -21,7 +21,7 @@ fn main() {
     let statements = match parser.parse() {
         Ok(s) => s,
         Err(e) => {
-            println!("{}", e.to_string());
+            eprintln!("{}", e.to_string());
             std::process::exit(1);
         }
     };
@@ -31,7 +31,7 @@ fn main() {
     for value in statements {
         // TODO: Figure out error signaling/handling
         if let Err(err) = interpreter.evaluate(value) {
-            eprintln!("{err}");
+            eprint!("{err}");
         }
     }
 }

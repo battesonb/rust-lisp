@@ -1,4 +1,4 @@
-use std::{cell::RefCell, hash::Hash, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, hash::Hash, rc::Rc};
 
 use crate::values::{ConsCell, Scope, Symbol};
 
@@ -6,6 +6,7 @@ use crate::values::{ConsCell, Scope, Symbol};
 /// referenced in code as values.
 #[derive(Clone, Debug)]
 pub struct FunctionValue {
+    pub name: Option<Cow<'static, str>>,
     pub parent_scope: Rc<RefCell<Box<Scope>>>,
     pub params: Vec<Symbol>,
     pub rest_argument: Option<Symbol>,
@@ -35,10 +36,15 @@ impl FunctionValue {
         rest_argument: Option<Symbol>,
     ) -> Self {
         Self {
+            name: None,
             parent_scope,
             params,
             rest_argument,
             body,
         }
+    }
+
+    pub fn set_name(&mut self, name: Cow<'static, str>) {
+        self.name = Some(name);
     }
 }

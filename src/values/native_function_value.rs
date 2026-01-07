@@ -1,8 +1,11 @@
 use std::{borrow::Cow, fmt::Debug, hash::Hash};
 
-use crate::{interpreter::Interpreter, native::NativeResult, values::Value};
+use crate::{
+    interpreter::{Interpreter, InterpreterResult},
+    values::Value,
+};
 
-pub type NativeFunction = fn(&mut Interpreter, Value) -> NativeResult<Value>;
+pub type NativeFunction = fn(&mut Interpreter, Value) -> InterpreterResult<Value>;
 
 #[derive(Debug, Clone)]
 pub struct NativeFunctionValue {

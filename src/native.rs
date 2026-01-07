@@ -3,7 +3,7 @@ use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 use thiserror::Error;
 
 use crate::{
-    interpreter::Interpreter,
+    interpreter::{Interpreter, InterpreterError, InterpreterResult, IntoInterpreterResult},
     values::{
         ConsCell, FunctionValue, HashTableValue, MacroValue, NumberValue, Scope, Symbol, Value,
         ValueExpectError, ValueExpectResult,
@@ -41,12 +41,27 @@ pub enum NativeError {
 
 pub type NativeResult<T> = Result<T, NativeError>;
 
+impl NativeError {
+    fn into_interpreter_error(self, interpreter: &Interpreter) -> InterpreterError {
+        InterpreterError {
+            stack: interpreter.context_stack().clone(),
+            message: self.to_string(),
+        }
+    }
+}
+
+impl<T> IntoInterpreterResult<T> for NativeResult<T> {
+    fn into_interpreter_result(self, interpreter: &Interpreter) -> InterpreterResult<T> {
+        self.map_err(|err| err.into_interpreter_error(interpreter))
+    }
+}
+
 /// Signature:
 ///
 /// (+ (&rest operands))
 ///
 /// add always returns the value of 0 (the identity) multiplied by all operands.
-pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> InterpreterResult<Value> {
     let mut total = NumberValue::default();
 
     loop {
@@ -54,13 +69,16 @@ pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
             break;
         }
 
-        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+        let ConsCell { value, rest: next } = rest
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
             Value::Number(value) => value,
             result => {
-                return Err(NativeError::NumberExpected(result));
+                return Err(NativeError::NumberExpected(result))
+                    .into_interpreter_result(interpreter)?;
             }
         };
         total = total.add(&result);
@@ -76,7 +94,7 @@ pub fn add(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 /// (* (&rest operands))
 ///
 /// Mul always returns the value of 1 (the identity) multiplied by all operands.
-pub fn mul(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+pub fn mul(interpreter: &mut Interpreter, mut rest: Value) -> InterpreterResult<Value> {
     let mut total = NumberValue::Integer(1);
 
     loop {
@@ -84,12 +102,16 @@ pub fn mul(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
             break;
         }
 
-        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+        let ConsCell { value, rest: next } = rest
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
             Value::Number(value) => value,
-            result => Err(NativeError::NumberExpected(result))?,
+            result => {
+                Err(NativeError::NumberExpected(result)).into_interpreter_result(interpreter)?
+            }
         };
 
         total = total.mul(&result);
@@ -106,14 +128,16 @@ pub fn mul(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 ///
 /// Sub functions as a unary negation with one parameter. If there are any other operands, it will
 /// instead perform consecutive subtraction on the first parameter.
-pub fn sub(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+pub fn sub(interpreter: &mut Interpreter, mut rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest: next } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     let value = interpreter.evaluate(*value)?;
 
     let mut total = match value {
         Value::Number(value) => value,
-        result => Err(NativeError::NumberExpected(result))?,
+        result => Err(NativeError::NumberExpected(result)).into_interpreter_result(interpreter)?,
     };
 
     // Single argument is a unary negation operation.
@@ -127,12 +151,16 @@ pub fn sub(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
             break;
         };
 
-        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+        let ConsCell { value, rest: next } = rest
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
             Value::Number(value) => value,
-            result => Err(NativeError::NumberExpected(result))?,
+            result => {
+                Err(NativeError::NumberExpected(result)).into_interpreter_result(interpreter)?
+            }
         };
 
         total = total.sub(&result);
@@ -153,14 +181,16 @@ pub fn sub(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 ///
 /// Div functions as a reciprocal with one parameter. If there are any other operands, it will
 /// instead perform consecutive division on the first parameter.
-pub fn div(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+pub fn div(interpreter: &mut Interpreter, mut rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest: next } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     let value = interpreter.evaluate(*value)?;
 
     let mut total = match value {
         Value::Number(value) => value,
-        result => Err(NativeError::NumberExpected(result))?,
+        result => Err(NativeError::NumberExpected(result)).into_interpreter_result(interpreter)?,
     };
 
     // Single argument is a unary negation operation.
@@ -174,12 +204,17 @@ pub fn div(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
             break;
         }
 
-        let ConsCell { value, rest: next } = rest.expect_cons_cell()?;
+        let ConsCell { value, rest: next } = rest
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
 
         let result = interpreter.evaluate(*value)?;
         let result = match result {
             Value::Number(value) => value,
-            result => return Err(NativeError::NumberExpected(result))?,
+            result => {
+                return Err(NativeError::NumberExpected(result))
+                    .into_interpreter_result(interpreter)?;
+            }
         };
 
         total = total.div(&result);
@@ -193,19 +228,22 @@ pub fn div(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value
 // Example:
 //
 // (error (list wow we really don't support strings, huh?))
-pub fn error(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn error(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "error".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter)?;
     }
 
     let value = interpreter.evaluate(*value)?;
 
-    Err(NativeError::Generic(Cow::Owned(value.to_string())))
+    Err(NativeError::Generic(Cow::Owned(value.to_string()))).into_interpreter_result(interpreter)
 }
 
 // Signature:
@@ -220,15 +258,23 @@ pub fn error(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
 // Lambda is special in a few ways, firstly it returns a special (opaque) function value. Secondly,
 // its first parameter, the parameter list, is never evaluated as code. It is treated as a list,
 // always. The body is only evaluated when called, otherwise it is treated as a quoted list.
-pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     let params = if value.is_nil() {
         None
     } else {
-        Some(value.expect_cons_cell()?)
+        Some(
+            value
+                .expect_cons_cell()
+                .into_interpreter_result(interpreter)?,
+        )
     };
-    let body = rest.expect_cons_cell()?;
+    let body = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     fn params_to_symbols(params: ConsCell) -> ValueExpectResult<Vec<Symbol>> {
         params
@@ -239,7 +285,8 @@ pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
 
     let mut params = params
         .map(|params| params_to_symbols(params))
-        .transpose()?
+        .transpose()
+        .into_interpreter_result(interpreter)?
         .unwrap_or_default();
 
     let rest_argument = {
@@ -253,7 +300,8 @@ pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
                 return Err(NativeError::Generic(
                     "rest symbol and argument must be the last symbols in the parameter list"
                         .into(),
-                ));
+                ))
+                .into_interpreter_result(interpreter)?;
             }
 
             let rest_argument = params.pop();
@@ -286,27 +334,34 @@ pub fn lambda(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
 ///
 /// Expands a given macro into the form(s) that it would produce before evaluation. No need to
 /// quote, as the input is treated as quoted by default.
-pub fn macroexpand(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn macroexpand(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "macroexpand".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
-    let ConsCell { value, rest } = value.expect_cons_cell()?;
+    let ConsCell { value, rest } = value
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
-    let macro_name = value.expect_symbol()?;
+    let macro_name = value.expect_symbol().into_interpreter_result(interpreter)?;
 
     let macro_value = interpreter.read_value(&macro_name);
 
     let Some(macro_value) = macro_value else {
-        return Err(NativeError::UnresolvedMacro(macro_name));
+        return Err(NativeError::UnresolvedMacro(macro_name)).into_interpreter_result(interpreter);
     };
 
-    let MacroValue { params, body } = macro_value.expect_macro()?;
+    let MacroValue { params, body, .. } = macro_value
+        .expect_macro()
+        .into_interpreter_result(interpreter)?;
 
     let arguments = rest.into_iter().map(|value| value).collect::<Vec<_>>();
 
@@ -315,7 +370,8 @@ pub fn macroexpand(interpreter: &mut Interpreter, rest: Value) -> NativeResult<V
             name: "macroexpand".into(),
             params: params.len(),
             arguments: arguments.len(),
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let mut param_map = HashMap::new();
@@ -332,24 +388,33 @@ pub fn macroexpand(interpreter: &mut Interpreter, rest: Value) -> NativeResult<V
 
 /// Defines a macro, which just expands the provided symbols as-is into other values which are then
 /// evaluated. See `macroexpand` to see this expansion as it is before evaluation.
-pub fn defmacro(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn defmacro(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
-    let symbol = value.expect_symbol()?;
+    let symbol = value.expect_symbol().into_interpreter_result(interpreter)?;
     let ConsCell {
         value: params,
         rest,
-    } = rest.expect_cons_cell()?;
-    let ConsCell { value: body, rest } = rest.expect_cons_cell()?;
+    } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+    let ConsCell { value: body, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "defmacro".into(),
             expected: 3,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
-    let body = body.expect_cons_cell()?;
+    let body = body
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     fn params_to_symbols(params: Value) -> ValueExpectResult<Vec<Symbol>> {
         params
@@ -358,10 +423,12 @@ pub fn defmacro(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Valu
             .collect::<ValueExpectResult<Vec<Symbol>>>()
     }
 
-    let params = params_to_symbols(*params)?;
-    let value = Value::Macro(MacroValue::new(params, body));
+    let params = params_to_symbols(*params).into_interpreter_result(interpreter)?;
+    let value = Value::Macro(MacroValue::new(symbol.clone(), params, body));
 
-    interpreter.set_value(symbol.clone(), value)?;
+    interpreter
+        .set_value(symbol.clone(), value)
+        .into_interpreter_result(interpreter)?;
 
     Ok(Value::Symbol(symbol))
 }
@@ -377,31 +444,52 @@ pub fn defmacro(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Valu
 ///
 /// Apply is at the heart of the interpreter. It takes in a list with an expected format and
 /// executes the function.
-pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: func, rest } = rest.expect_cons_cell()?;
-    let ConsCell { value: args, rest } = rest.expect_cons_cell()?;
+pub fn apply(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value: func, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+    let ConsCell { value: args, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "apply".into(),
             expected: 2,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let func = interpreter.evaluate(*func)?;
+    let args = interpreter.evaluate(*args)?;
 
+    apply_internal(interpreter, func, args)
+}
+
+/// This simply exists to avoid interpreting the last parameter as an expression, but rather a
+/// quoted form so that the implementation can be borrowed by the interpreter.
+pub(crate) fn apply_internal(
+    interpreter: &mut Interpreter,
+    func: Value,
+    args: Value,
+) -> InterpreterResult<Value> {
     let FunctionValue {
         parent_scope,
         params,
         body,
         rest_argument,
-    } = func.expect_function()?;
+        ..
+    } = func
+        .expect_function()
+        .into_interpreter_result(interpreter)?;
 
-    let args = interpreter.evaluate(*args)?;
     let args = if args.is_nil() {
         Vec::default()
     } else {
-        args.expect_cons_cell()?.into_iter().collect::<Vec<_>>()
+        args.expect_cons_cell()
+            .into_interpreter_result(interpreter)?
+            .into_iter()
+            .collect::<Vec<_>>()
     };
 
     if rest_argument.is_some() && args.len() < params.len() {
@@ -409,7 +497,8 @@ pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
             name: "apply".into(),
             params: params.len(),
             arguments: args.len(),
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     if rest_argument.is_none() && args.len() != params.len() {
@@ -417,7 +506,8 @@ pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
             name: "apply".into(),
             params: params.len(),
             arguments: args.len(),
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let scope = Rc::new(RefCell::new(Box::new(Scope::new(Some(parent_scope)))));
@@ -449,7 +539,7 @@ pub fn apply(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
 /// (progn (&rest EXPRS)) -> VALUE
 ///
 /// Evaluates each expression and returns the value returned by the last expression.
-pub fn progn(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+pub fn progn(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     let mut result = Value::default();
     for value in Value::iter(&rest) {
         result = interpreter.evaluate(value.clone())?;
@@ -470,22 +560,26 @@ pub fn progn(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
 /// Setq (or "set quoted") sets the result of the expression for each pair to the symbol preceding
 /// it in each pair. It is a special operator in that it does not evaluate the first parameter of
 /// each pair as an expression.
-pub fn setq(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+pub fn setq(interpreter: &mut Interpreter, mut rest: Value) -> InterpreterResult<Value> {
     let mut last_value = None;
     loop {
         let ConsCell { value, rest: next } = match rest {
             Value::ConsCell(cell) => cell,
             _ => break,
         };
-        let symbol = value.expect_symbol()?;
+        let symbol = value.expect_symbol().into_interpreter_result(interpreter)?;
         let ConsCell {
             value: next_value,
             rest: next_rest,
-        } = next.expect_cons_cell()?;
+        } = next
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
 
         let value = interpreter.evaluate(*next_value)?;
 
-        interpreter.set_value(symbol, value.clone())?;
+        interpreter
+            .set_value(symbol, value.clone())
+            .into_interpreter_result(interpreter)?;
 
         last_value = Some(value);
         rest = *next_rest;
@@ -499,31 +593,41 @@ pub fn setq(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Valu
 /// (eval LIST) -> VALUE
 ///
 /// Eval evaluates a provided list as an expression. This allows data to be evaluated as code.
-pub fn eval(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn eval(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "eval".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let result = interpreter.evaluate(*value)?;
-    let result = result.expect_cons_cell()?;
+    let result = result
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     interpreter.evaluate_list(result)
 }
 
-pub fn equal(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: a, rest } = rest.expect_cons_cell()?;
-    let ConsCell { value: b, rest } = rest.expect_cons_cell()?;
+pub fn equal(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value: a, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+    let ConsCell { value: b, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "=".into(),
             expected: 2,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let a = interpreter.evaluate(*a)?;
@@ -535,15 +639,20 @@ pub fn equal(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
     Ok(Value::cond(a.eq(&b)))
 }
 
-pub fn less(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: a, rest } = rest.expect_cons_cell()?;
-    let ConsCell { value: b, rest } = rest.expect_cons_cell()?;
+pub fn less(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value: a, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+    let ConsCell { value: b, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "<".into(),
             expected: 2,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let a = interpreter.evaluate(*a)?;
@@ -553,7 +662,7 @@ pub fn less(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
         (Value::Number(a), Value::Number(b)) => a.less(&b),
         (x, _) => {
             // TODO: Correctly model the wrong type, here.
-            return Err(NativeError::NumberExpected(x));
+            return Err(NativeError::NumberExpected(x)).into_interpreter_result(interpreter);
         }
     };
 
@@ -566,7 +675,7 @@ pub fn less(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 ///
 /// Both `and` and `or` are short-circuiting native methods. It might be possible to implement
 /// these without a native implementation for both, but leaving for now.
-pub fn or(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+pub fn or(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     let mut result = false;
     for value in rest.into_iter() {
         let value = interpreter.evaluate(value)?;
@@ -586,7 +695,7 @@ pub fn or(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 ///
 /// Both `and` and `or` are short-circuiting native methods. It might be possible to implement
 /// these without a native implementation for both, but leaving for now.
-pub fn and(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+pub fn and(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     let mut result = true;
     for value in rest.into_iter() {
         let value = interpreter.evaluate(value)?;
@@ -605,16 +714,23 @@ pub fn and(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 /// (if <COND_EXPR> <TRUE_EXPR> <FALSE_EXPR>) -> <TRUE_EXPR>
 ///
 /// If is special in that it "short-circuits" the evaluation only to the branch that is followed.
-pub fn if_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: test, rest } = rest.expect_cons_cell()?;
-    let ConsCell { value: pass, rest } = rest.expect_cons_cell()?;
-    let ConsCell { value: fail, rest } = rest.expect_cons_cell()?;
+pub fn if_native(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value: test, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+    let ConsCell { value: pass, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+    let ConsCell { value: fail, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "if".into(),
             expected: 3,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let test = interpreter.evaluate(*test)?;
@@ -629,7 +745,7 @@ pub fn if_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Val
 ///
 /// If is special in that it "short-circuits" the evaluation to the first branch that evaluates to
 /// a non-nil result.
-pub fn cond(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Value> {
+pub fn cond(interpreter: &mut Interpreter, mut rest: Value) -> InterpreterResult<Value> {
     loop {
         if rest.is_nil() {
             break;
@@ -638,22 +754,29 @@ pub fn cond(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Valu
         let ConsCell {
             value: pair,
             rest: trail,
-        } = rest.expect_cons_cell()?;
+        } = rest
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
 
         let ConsCell {
             value: test,
             rest: pair_rest,
-        } = pair.expect_cons_cell()?;
+        } = pair
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
         let ConsCell {
             value: action,
             rest: pair_rest,
-        } = pair_rest.expect_cons_cell()?;
+        } = pair_rest
+            .expect_cons_cell()
+            .into_interpreter_result(interpreter)?;
 
         if !pair_rest.is_nil() {
             return Err(NativeError::InvalidExactArgumentCount {
                 name: "cond pair".into(),
                 expected: 2,
-            });
+            })
+            .into_interpreter_result(interpreter);
         }
 
         let test = interpreter.evaluate(*test)?;
@@ -673,14 +796,17 @@ pub fn cond(interpreter: &mut Interpreter, mut rest: Value) -> NativeResult<Valu
 /// (quote value) -> value
 ///
 /// Quote is special in that does not evaluate its argument. It returns it as-is, as data.
-pub fn quote(_interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn quote(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "quote".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     Ok(*value)
@@ -689,12 +815,12 @@ pub fn quote(_interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
 /// Signature:
 ///
 /// (list (&rest args)) -> LIST
-pub fn list(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+pub fn list(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     // TODO: Avoid this allocation
     let values = rest
         .into_iter()
         .map(|value| interpreter.evaluate(value))
-        .collect::<NativeResult<Vec<_>>>()?;
+        .collect::<InterpreterResult<Vec<_>>>()?;
 
     Ok(Value::join(values))
 }
@@ -702,18 +828,23 @@ pub fn list(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 /// Signature:
 ///
 /// (car <EXPR>) -> LIST
-pub fn car(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn car(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "car".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let value = interpreter.evaluate(*value)?;
-    let ConsCell { value, .. } = value.expect_cons_cell()?;
+    let ConsCell { value, .. } = value
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     Ok(*value)
 }
@@ -721,22 +852,27 @@ pub fn car(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 /// Signature:
 ///
 /// (cdr <EXPR>) -> LIST
-pub fn cdr(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+pub fn cdr(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     if rest.is_nil() {
         return Ok(Value::nil());
     }
 
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "cdr".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let value = interpreter.evaluate(*value)?;
-    let ConsCell { rest, .. } = value.expect_cons_cell()?;
+    let ConsCell { rest, .. } = value
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     Ok(*rest)
 }
@@ -744,14 +880,17 @@ pub fn cdr(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
 /// Signature:
 ///
 /// (print <EXPR>) -> <VALUE>
-pub fn print(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn print(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "print".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let value = interpreter.evaluate(*value)?;
@@ -764,11 +903,13 @@ pub fn print(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> 
 /// Signature:
 ///
 /// (let (LIST &args rest)) -> VALUE
-pub fn let_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
+pub fn let_native(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     let ConsCell {
         value: mut variable_list,
         rest,
-    } = rest.expect_cons_cell()?;
+    } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     let scope = Rc::new(RefCell::new(Box::new(Scope::new(Some(
         interpreter.active_scope(),
@@ -780,25 +921,34 @@ pub fn let_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Va
                 break;
             }
 
-            let ConsCell { value: pair, rest } = variable_list.expect_cons_cell()?;
+            let ConsCell { value: pair, rest } = variable_list
+                .expect_cons_cell()
+                .into_interpreter_result(interpreter)?;
 
             let ConsCell {
                 value: symbol,
                 rest: pair_rest,
-            } = pair.expect_cons_cell()?;
+            } = pair
+                .expect_cons_cell()
+                .into_interpreter_result(interpreter)?;
             let ConsCell {
                 value,
                 rest: pair_rest,
-            } = pair_rest.expect_cons_cell()?;
+            } = pair_rest
+                .expect_cons_cell()
+                .into_interpreter_result(interpreter)?;
 
             if !pair_rest.is_nil() {
                 return Err(NativeError::InvalidExactArgumentCount {
                     name: "let pair".into(),
                     expected: 2,
-                });
+                })
+                .into_interpreter_result(interpreter);
             }
 
-            let symbol = symbol.expect_symbol()?;
+            let symbol = symbol
+                .expect_symbol()
+                .into_interpreter_result(interpreter)?;
             let value = interpreter.evaluate(*value)?;
 
             scope.insert(symbol, value);
@@ -817,17 +967,20 @@ pub fn let_native(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Va
 /// Signature:
 ///
 /// (boundp (SYMBOL)) -> t | ()
-pub fn boundp(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn boundp(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "boundp".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
-    let symbol = value.expect_symbol()?;
+    let symbol = value.expect_symbol().into_interpreter_result(interpreter)?;
 
     Ok(Value::cond(interpreter.read_value(&symbol).is_some()))
 }
@@ -835,15 +988,20 @@ pub fn boundp(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value>
 /// Signature:
 ///
 /// (cons (a b)) -> CONS_CELL
-pub fn cons(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: a, rest } = rest.expect_cons_cell()?;
-    let ConsCell { value: b, rest } = rest.expect_cons_cell()?;
+pub fn cons(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value: a, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+    let ConsCell { value: b, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "cons".into(),
             expected: 2,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     let a = interpreter.evaluate(*a)?;
@@ -852,47 +1010,64 @@ pub fn cons(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
     Ok(Value::ConsCell(ConsCell::new(a).with_rest(b)))
 }
 
-pub fn make_hash_table(_interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    rest.expect_nil()?;
+pub fn make_hash_table(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    rest.expect_nil().into_interpreter_result(interpreter)?;
 
     Ok(Value::HashTable(HashTableValue::default()))
 }
 
-pub fn gethash(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: table, rest } = rest.expect_cons_cell()?;
+pub fn gethash(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value: table, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     let table = interpreter.evaluate(*table)?;
-    let table = table.expect_hash_table()?;
+    let table = table
+        .expect_hash_table()
+        .into_interpreter_result(interpreter)?;
 
-    let key = rest.expect_cons_cell()?;
+    let key = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
     let key = interpreter.evaluate(*key.value)?;
 
     let Some(value) = table.get(&key) else {
         return Err(NativeError::Generic(
             format!("Failed to retrieve value from hash map for key {key}").into(),
-        ));
+        ))
+        .into_interpreter_result(interpreter);
     };
 
     Ok(value.clone())
 }
 
-pub fn sethash(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value: table, rest } = rest.expect_cons_cell()?;
+pub fn sethash(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value: table, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     let table = interpreter.evaluate(*table)?;
-    let mut table = table.expect_hash_table()?;
+    let mut table = table
+        .expect_hash_table()
+        .into_interpreter_result(interpreter)?;
 
-    let ConsCell { value: key, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value: key, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
+
     let key = interpreter.evaluate(*key)?;
 
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
     let value = interpreter.evaluate(*value)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "sethash".into(),
             expected: 3,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
 
     table.insert(key, value);
@@ -900,14 +1075,17 @@ pub fn sethash(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value
     Ok(Value::Nil)
 }
 
-pub fn type_of(interpreter: &mut Interpreter, rest: Value) -> NativeResult<Value> {
-    let ConsCell { value, rest } = rest.expect_cons_cell()?;
+pub fn type_of(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
+    let ConsCell { value, rest } = rest
+        .expect_cons_cell()
+        .into_interpreter_result(interpreter)?;
 
     if !rest.is_nil() {
         return Err(NativeError::InvalidExactArgumentCount {
             name: "typep".into(),
             expected: 1,
-        });
+        })
+        .into_interpreter_result(interpreter);
     }
     let value = interpreter.evaluate(*value)?;
 

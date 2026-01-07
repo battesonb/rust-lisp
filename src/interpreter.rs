@@ -1,65 +1,123 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+
+use thiserror::Error;
 
 use crate::{
     lexer::Lexer,
     native::{
-        NativeError, NativeResult, add, and, apply, boundp, car, cdr, cond, cons, defmacro, div,
-        equal, error, eval, gethash, if_native, lambda, less, let_native, list, macroexpand,
-        make_hash_table, mul, or, print, progn, quote, sethash, setq, sub, type_of,
+        NativeError, NativeResult, add, and, apply, apply_internal, boundp, car, cdr, cond, cons,
+        defmacro, div, equal, error, eval, gethash, if_native, lambda, less, let_native, list,
+        macroexpand, make_hash_table, mul, or, print, progn, quote, sethash, setq, sub, type_of,
     },
     parser::Parser,
     values::{ConsCell, MacroValue, NativeFunction, NativeFunctionValue, Scope, Symbol, Value},
 };
 
+#[derive(Clone, Debug, Error)]
+pub struct InterpreterError {
+    pub stack: Vec<Value>,
+    pub message: String,
+}
+
+impl Display for InterpreterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "ERROR: {}", self.message)?;
+        if self.stack.len() > 1 {
+            writeln!(f, "TRACE:")?;
+            for (i, context) in self.stack.iter().enumerate() {
+                writeln!(f, "{}. {}", i + 1, context)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Error)]
+pub struct InterpreterErrorEntry {
+    /// A quoted, not evaluated, value which provides the context for a function name.
+    pub context: Option<Value>,
+    pub message: String,
+}
+
+impl Display for InterpreterErrorEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.context {
+            Some(context) => write!(f, "{}: {}", context, self.message),
+            None => write!(f, "{}", self.message),
+        }
+    }
+}
+
+pub type InterpreterResult<T> = Result<T, InterpreterError>;
+
+pub trait IntoInterpreterResult<T> {
+    fn into_interpreter_result(self, interpreter: &Interpreter) -> InterpreterResult<T>;
+}
+
 pub struct Interpreter {
+    context_stack: Vec<Value>,
     active_scope_stack: Vec<Rc<RefCell<Box<Scope>>>>,
-    native_functions: HashMap<Cow<'static, str>, NativeFunction>,
+    native_functions: HashMap<Cow<'static, str>, Value>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let root_scope = Rc::new(RefCell::new(Box::new(Scope::default())));
         Self {
+            context_stack: Vec::new(),
             active_scope_stack: vec![root_scope],
             native_functions: build_native_function_map(),
         }
     }
 
-    pub fn evaluate(&mut self, value: Value) -> NativeResult<Value> {
+    pub fn evaluate(&mut self, value: Value) -> InterpreterResult<Value> {
         let result = match value {
             Value::ConsCell(cell) => self.evaluate_list(cell)?,
             Value::Symbol(symbol) => self
                 .read_value(&symbol)
-                .ok_or_else(|| NativeError::UndefinedVariable(symbol))?,
+                .ok_or_else(|| NativeError::UndefinedVariable(symbol))
+                .into_interpreter_result(&self)?,
             _ => value,
         };
 
         Ok(result)
     }
 
-    pub fn evaluate_list(&mut self, cell: ConsCell) -> NativeResult<Value> {
+    pub fn evaluate_list(&mut self, cell: ConsCell) -> InterpreterResult<Value> {
         let ConsCell { value, rest: next } = cell;
 
         let head = self.evaluate(*value)?;
 
+        // Potentially quite expensive... Values should likely always be Rc<RefCell<...>> types.
+        self.context_stack.push(head.clone());
+
         let result = match head {
-            Value::Symbol(value) => Err(NativeError::UndefinedVariable(value))?,
-            Value::Function(function) => apply(
-                self,
-                Value::ConsCell(ConsCell::new(Value::Function(function)).with_rest(
-                    Value::ConsCell(ConsCell::new(Value::ConsCell(
-                        ConsCell::new(Value::Symbol(Symbol::new("list"))).with_rest(*next),
-                    ))),
-                )),
-            )?,
-            Value::Macro(MacroValue { params, body }) => {
-                self.evaluate_macro(*next, params, body)?
+            Value::Symbol(value) => {
+                Err(NativeError::UndefinedVariable(value)).into_interpreter_result(&self)
             }
-            Value::NativeFunction(NativeFunctionValue { func, .. }) => func(self, *next)?,
-            _ => Err(NativeError::InvalidFunctionExpression(head))?,
+            Value::Function(function) => {
+                // Why is this provided as follows?
+                //
+                // 1. We want to use the same apply implementation as is exposed in the Lisp, but
+                //    we don't want the same indirection. There is no need to coerce the
+                //    interpreter to perform these operations as we can just stay in the native
+                //    world.
+                // 2. We don't want the internal `apply` and `list` calls to be visible in the
+                //    error stack, as it's just extra noise and an internal implementation detail.
+                list(self, *next)
+                    .map(|rest| apply_internal(self, Value::Function(function), rest))
+                    .flatten()
+            }
+            Value::Macro(MacroValue { params, body, .. }) => {
+                self.evaluate_macro(*next, params, body)
+            }
+            Value::NativeFunction(NativeFunctionValue { func, .. }) => func(self, *next),
+            _ => Err(NativeError::InvalidFunctionExpression(head)).into_interpreter_result(&self),
         };
 
-        Ok(result)
+        self.context_stack.pop();
+
+        result
     }
 
     /// First expands a macro into a value and then evaluates it.
@@ -68,7 +126,7 @@ impl Interpreter {
         next: Value,
         params: Vec<Symbol>,
         body: ConsCell,
-    ) -> NativeResult<Value> {
+    ) -> InterpreterResult<Value> {
         // validate & prepare
         let arguments = next.into_iter().map(|value| value).collect::<Vec<_>>();
         if arguments.len() != params.len() {
@@ -76,7 +134,8 @@ impl Interpreter {
                 name: "macro".into(),
                 params: params.len(),
                 arguments: arguments.len(),
-            });
+            })
+            .into_interpreter_result(&self);
         }
 
         let mut param_map = HashMap::new();
@@ -117,17 +176,14 @@ impl Interpreter {
         while let Some(scope) = current_scope {
             let scope = scope.borrow();
             if let Some(value) = scope.get(symbol) {
-                return Some(value.clone()); // Huge footgun, this should not be cloned...
+                return Some(value.clone());
             }
             current_scope = scope.parent_scope();
         }
 
         // Look for native functions
-        if let Some(native_func) = self.native_functions.get(&symbol.as_cow()) {
-            return Some(Value::NativeFunction(NativeFunctionValue {
-                name: symbol.as_cow(),
-                func: *native_func,
-            }));
+        if let Some(value) = self.native_functions.get(&symbol.as_cow()) {
+            return Some(value.clone());
         }
 
         None
@@ -197,39 +253,53 @@ impl Interpreter {
     pub(crate) fn push_active_scope(&mut self, scope: Rc<RefCell<Box<Scope>>>) {
         self.active_scope_stack.push(scope);
     }
+
+    pub(crate) fn context_stack(&self) -> &Vec<Value> {
+        &self.context_stack
+    }
 }
 
-fn build_native_function_map() -> HashMap<Cow<'static, str>, NativeFunction> {
-    let mut map: HashMap<Cow<'static, str>, NativeFunction> = HashMap::new();
-    map.insert("+".into(), add);
-    map.insert("*".into(), mul);
-    map.insert("-".into(), sub);
-    map.insert("/".into(), div);
-    map.insert("=".into(), equal);
-    map.insert("<".into(), less);
-    map.insert("and".into(), and);
-    map.insert("apply".into(), apply);
-    map.insert("boundp".into(), boundp);
-    map.insert("car".into(), car);
-    map.insert("cdr".into(), cdr);
-    map.insert("cond".into(), cond);
-    map.insert("cons".into(), cons);
-    map.insert("defmacro".into(), defmacro);
-    map.insert("error".into(), error);
-    map.insert("eval".into(), eval);
-    map.insert("if".into(), if_native);
-    map.insert("lambda".into(), lambda);
-    map.insert("let".into(), let_native);
-    map.insert("list".into(), list);
-    map.insert("macroexpand".into(), macroexpand);
-    map.insert("or".into(), or);
-    map.insert("print".into(), print);
-    map.insert("progn".into(), progn);
-    map.insert("quote".into(), quote);
-    map.insert("setq".into(), setq);
-    map.insert("make-hash-table".into(), make_hash_table);
-    map.insert("gethash".into(), gethash);
-    map.insert("sethash".into(), sethash);
-    map.insert("type-of".into(), type_of);
+fn build_native_function_map() -> HashMap<Cow<'static, str>, Value> {
+    let mut map: HashMap<Cow<'static, str>, Value> = HashMap::new();
+    let native_functions: [(Cow<'static, str>, NativeFunction); _] = [
+        ("+".into(), add),
+        ("*".into(), mul),
+        ("-".into(), sub),
+        ("/".into(), div),
+        ("=".into(), equal),
+        ("<".into(), less),
+        ("and".into(), and),
+        ("apply".into(), apply),
+        ("boundp".into(), boundp),
+        ("car".into(), car),
+        ("cdr".into(), cdr),
+        ("cond".into(), cond),
+        ("cons".into(), cons),
+        ("defmacro".into(), defmacro),
+        ("error".into(), error),
+        ("eval".into(), eval),
+        ("if".into(), if_native),
+        ("lambda".into(), lambda),
+        ("let".into(), let_native),
+        ("list".into(), list),
+        ("macroexpand".into(), macroexpand),
+        ("or".into(), or),
+        ("print".into(), print),
+        ("progn".into(), progn),
+        ("quote".into(), quote),
+        ("setq".into(), setq),
+        ("make-hash-table".into(), make_hash_table),
+        ("gethash".into(), gethash),
+        ("sethash".into(), sethash),
+        ("type-of".into(), type_of),
+    ];
+
+    for (name, func) in native_functions {
+        map.insert(
+            name.clone(),
+            Value::NativeFunction(NativeFunctionValue { name, func }),
+        );
+    }
+
     map
 }

@@ -55,7 +55,7 @@ fn main() -> rustyline::Result<()> {
                     println!("{result}");
                 }
                 Err(err) => {
-                    println!("ERROR: {err}");
+                    print!("{err}");
                 }
             }
         }

@@ -28,14 +28,23 @@ fn it_use_stateful_functions_to_simulate_objects() {
     cmd.write_stdin(
         r#"
 (defun make-account(balance)
-    (lambda (operation amount)
-        (if (= operation (quote deposit))
-            (setq balance (+ balance amount))
-            (if (= operation (quote withdraw)) (setq balance (- balance amount)) balance))))
+    (lambda (operation &rest args)
+        (cond ((= operation (quote deposit)) (setq balance (+ balance (car args))))
+              ((= operation (quote withdraw)) (setq balance (- balance (car args))))
+              ((= operation (quote check)) balance)
+              (t (error "unexpected operation")))))
 (setq account (make-account 0))
 (print (account (quote deposit) 100))
 (print (account (quote withdraw) 30))
+(print (account (quote check)))
+(print (account (quote invalid)))
     "#,
     );
-    cmd.assert().success().stdout("100\n70\n");
+    cmd.assert().success().stdout("100\n70\n70\n").stderr(r#"ERROR: "unexpected operation"
+TRACE:
+1. <NATIVE-FUNCTION print>
+2. <FUNCTION (operation)>
+3. <NATIVE-FUNCTION cond>
+4. <NATIVE-FUNCTION error>
+"#);
 }

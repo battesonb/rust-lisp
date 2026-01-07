@@ -2,9 +2,12 @@ use std::{borrow::Cow, fmt::Display};
 
 use thiserror::Error;
 
-use crate::values::{
-    FunctionValue, HashTableValue, MacroValue, NumberValue, Symbol, cons_cell::ConsCell,
-    native_function_value::NativeFunctionValue,
+use crate::{
+    interpreter::{Interpreter, InterpreterError, InterpreterResult, IntoInterpreterResult},
+    values::{
+        FunctionValue, HashTableValue, MacroValue, NumberValue, Symbol, cons_cell::ConsCell,
+        native_function_value::NativeFunctionValue,
+    },
 };
 
 #[derive(Debug, Clone, Error)]
@@ -23,7 +26,22 @@ pub enum ValueExpectError {
     ExpectedHashTable(Value),
 }
 
+impl ValueExpectError {
+    fn into_interpreter_error(self, interpreter: &Interpreter) -> InterpreterError {
+        InterpreterError {
+            stack: interpreter.context_stack().clone(),
+            message: self.to_string(),
+        }
+    }
+}
+
 pub type ValueExpectResult<T> = Result<T, ValueExpectError>;
+
+impl<T> IntoInterpreterResult<T> for ValueExpectResult<T> {
+    fn into_interpreter_result(self, interpreter: &Interpreter) -> InterpreterResult<T> {
+        self.map_err(|err| err.into_interpreter_error(interpreter))
+    }
+}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
@@ -171,9 +189,10 @@ impl Display for Value {
                     .collect::<Vec<_>>()
                     .join(" "),
             ),
-            Value::Macro(MacroValue { params, .. }) => write!(
+            Value::Macro(MacroValue { name, params, .. }) => write!(
                 f,
-                "<MACRO ({})>",
+                "<MACRO {} ({})>",
+                name,
                 params
                     .iter()
                     .map(Symbol::as_str)

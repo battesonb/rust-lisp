@@ -160,7 +160,9 @@ fn error_constructs_a_raw_error() {
     (print (error (quote failure)))
     "#,
     );
-    cmd.assert().success().stderr("failure\n");
+    cmd.assert().success().stderr(
+        "ERROR: failure\nTRACE:\n1. <NATIVE-FUNCTION print>\n2. <NATIVE-FUNCTION error>\n",
+    );
 }
 
 #[test]
@@ -393,5 +395,7 @@ fn type_of_works() {
         (print (type-of (make-hash-table)))
     "#,
     );
-    cmd.assert().success().stdout("null\ncons\nstring\nsymbol\nnumber\nfunction\nnative-function\nmacro\nhash-table\n");
+    cmd.assert().success().stdout(
+        "null\ncons\nstring\nsymbol\nnumber\nfunction\nnative-function\nmacro\nhash-table\n",
+    );
 }
