@@ -1016,6 +1016,9 @@ pub fn make_hash_table(interpreter: &mut Interpreter, rest: Value) -> Interprete
     Ok(Value::HashTable(HashTableValue::default()))
 }
 
+/// Signature:
+///
+/// (gethash TABLE KEY) -> VALUE | nil
 pub fn gethash(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     let ConsCell { value: table, rest } = rest
         .expect_cons_cell()
@@ -1032,15 +1035,15 @@ pub fn gethash(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<
     let key = interpreter.evaluate(*key.value)?;
 
     let Some(value) = table.get(&key) else {
-        return Err(NativeError::Generic(
-            format!("Failed to retrieve value from hash map for key {key}").into(),
-        ))
-        .into_interpreter_result(interpreter);
+        return Ok(Value::nil());
     };
 
     Ok(value.clone())
 }
 
+/// Signature:
+///
+/// (sethash TABLE KEY VALUE) -> nil
 pub fn sethash(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     let ConsCell { value: table, rest } = rest
         .expect_cons_cell()
