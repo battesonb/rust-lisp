@@ -4,20 +4,34 @@
     <meta name="viewport" content="width=device-width" />
   </head>
   <body style="display: flex; flex-direction: column; align-items: center;">
-    <div style="display: flex; gap: 0.5em; flex-direction: column; width: 100%; max-width: 968px;">
+    <div style="display: flex; gap: 0.5em; flex-direction: column; width: 100%; max-width: 968px; height: 100%;">
       <div style="display: flex; justify-content: space-between;">
         <span style="font-weight: bold; margin: 0.25em 0;">> rustlisp</span>
         <a href="https://github.com/battesonb/rust-lisp" target="_blank" style="margin: 0.25em 0;">see source for syntax</a>
       </div>
-      <textarea id="input" rows=10 style="resize: none;"></textarea>
+      <select id="select"></select>
+      <textarea id="input" rows=16 style="resize: none;"></textarea>
       <button id="submit">Submit</button>
-      <pre style="margin: 0;" id="output"></pre>
+      <div style="display: flex; flex-direction: row; border-bottom: 1px solid #AAA; padding-bottom: 0.5em;">
+        <strong style="margin-bottom: 0.25em">Expression:&nbsp;</strong>
+        <pre style="margin: 0;" id="expression"></pre>
+      </div>
+      <div style="display: flex; flex: 1;">
+        <div style="flex: 1; display: flex; flex-direction: column;">
+          <strong style="margin-bottom: 0.25em">Output</strong>
+          <pre style="margin: 0;" id="output"></pre>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; border-left: 1px solid #AAA; padding-left: 0.5em;">
+          <strong style="margin-bottom: 0.25em">Error</strong>
+          <pre style="margin: 0; color: white; background-color: #f04f43;" id="error"></pre>
+        </div>
+      </div>
     </div>
 
     <style>
     * {
       font-family: monospace;
-      font-size: 18px;
+      font-size: 16px;
     }
     </style>
 

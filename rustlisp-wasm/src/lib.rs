@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use rustlisp::{
     interpreter::{Interpreter, InterpreterConfig},
     lexer::Lexer,
@@ -5,45 +7,139 @@ use rustlisp::{
 };
 use wasm_bindgen::prelude::*;
 
-const EXAMPLE: &'static str = r#"(defun fact (n)
+const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+    vec![
+        (
+            "Factorial".into(),
+            r#"(defun fact (n)
   (if (<= n 1)
     1
     (* n (fact (- n 1)))))
-(print (fact 5))"#;
+(print (fact 5))"#
+                .into(),
+        ),
+        (
+            "Fibonacci".into(),
+            r#"(defun fib (n)
+  (if (<= n 1)
+    n
+    (+ (fib (- n 1))
+       (fib (- n 2)))))
+  (print (fib 7)) ; beware, a bigger number can lock up your browser"#
+                .into(),
+        ),
+        (
+            "Object".into(),
+            r#"(defun make-account(balance)
+  (lambda (operation &rest args)
+    (cond ((= operation (quote deposit)) (setq balance (+ balance (car args))))
+          ((= operation (quote withdraw)) (setq balance (- balance (car args))))
+          ((= operation (quote check)) balance)
+          (t (error "unexpected operation")))))
+
+(setq account (make-account 0))
+
+(print (account (quote deposit) 100))
+(print (account (quote withdraw) 30))
+(print (account (quote check)))
+"#
+            .into(),
+        ),
+        (
+            "Stateful counter".into(),
+            r#"(defun make-counter (acc)
+  (lambda ()
+    (setq acc (+ acc 1))))
+
+(setq count (make-counter 0))
+
+(print (count))
+(print (count))
+(print (count))"#
+                .into(),
+        ),
+        ("Empty".into(), "".into()),
+    ]
+});
 
 #[wasm_bindgen(start)]
 fn main() -> Result<(), JsValue> {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
 
+    let select = document
+        .get_element_by_id("select")
+        .expect("Expected a select element")
+        .dyn_into::<web_sys::HtmlSelectElement>()?;
     let input = document
         .get_element_by_id("input")
-        .expect("Expected an input")
-        .dyn_into::<web_sys::HtmlTextAreaElement>()
-        .expect("Input must be a text area");
+        .expect("Expected an input element")
+        .dyn_into::<web_sys::HtmlTextAreaElement>()?;
     let submit = document
         .get_element_by_id("submit")
-        .expect("Expected an submit");
+        .expect("Expected a submit element");
+    let expression = document
+        .get_element_by_id("expression")
+        .expect("Expected an expression element")
+        .dyn_into::<web_sys::HtmlElement>()?;
+    let error = document
+        .get_element_by_id("error")
+        .expect("Expected an error element")
+        .dyn_into::<web_sys::HtmlElement>()?;
     let output = document
         .get_element_by_id("output")
-        .expect("Expected an output")
-        .dyn_into::<web_sys::HtmlElement>()
-        .expect("Output must be an HTML element");
+        .expect("Expected an output element")
+        .dyn_into::<web_sys::HtmlElement>()?;
 
-    input.set_text_content(EXAMPLE.into());
+    for (key, value) in EXAMPLES.iter() {
+        let option = document
+            .create_element("option")?
+            .dyn_into::<web_sys::HtmlOptionElement>()?;
+        option.set_label(key);
+        option.set_value(value);
+        select.append_child(&option)?;
+    }
 
-    let set_output = {
-        let output = output.clone();
-        move |text: String, err: bool| {
-            output.set_text_content(Some(&text));
-            output
-                .style()
-                .set_property("color", if err { "white" } else { "" })
-                .expect("Failed to set output CSS color");
-            output
-                .style()
-                .set_property("background-color", if err { "#f04f43" } else { "" })
-                .expect("Failed to set output CSS background-color");
+    let select_option = {
+        let input = input.clone();
+        let select = select.clone();
+        move || {
+            let index = select
+                .options()
+                .selected_index()
+                .expect("Expected selected index") as u32;
+            let option = select
+                .options()
+                .get_with_index(index)
+                .expect("Expected option for selected index")
+                .dyn_into::<web_sys::HtmlOptionElement>()
+                .unwrap();
+            input.set_value(&option.value());
+        }
+    };
+
+    select_option();
+
+    let select_option_callback = Closure::<dyn FnMut(_)>::new(move |_: web_sys::Event| {
+        select_option();
+    });
+
+    select.add_event_listener_with_callback(
+        "change",
+        select_option_callback.as_ref().unchecked_ref(),
+    )?;
+    select_option_callback.forget();
+
+    let append_error = {
+        let error = error.clone();
+        move |text: String| {
+            if let Some(original) = error.text_content()
+                && !original.is_empty()
+            {
+                error.set_text_content(Some(&format!("{}\n{}", original, text.trim())));
+            } else {
+                error.set_text_content(Some(&text.trim()));
+            }
         }
     };
 
@@ -65,12 +161,17 @@ fn main() -> Result<(), JsValue> {
     interpreter.load_std();
 
     let submit_callback = Closure::<dyn FnMut(_)>::new(move |_: web_sys::MouseEvent| {
+        // Clear previous outputs
+        error.set_text_content(None);
+        output.set_text_content(None);
+        expression.set_text_content(None);
+
         let text = input.value();
         let lexer = Lexer::new(&text);
         let tokens = match lexer.lex() {
             Ok(s) => s,
             Err(e) => {
-                set_output(e.to_string(), true);
+                append_error(e.to_string());
                 return;
             }
         };
@@ -78,17 +179,17 @@ fn main() -> Result<(), JsValue> {
         let statements = match parser.parse() {
             Ok(s) => s,
             Err(e) => {
-                set_output(e.to_string(), true);
+                append_error(e.to_string());
                 return;
             }
         };
         for value in statements {
             match interpreter.evaluate(value) {
                 Ok(result) => {
-                    set_output(result.to_string(), false);
+                    expression.set_text_content(Some(&result.to_string()));
                 }
                 Err(e) => {
-                    set_output(e.to_string(), true);
+                    append_error(e.to_string());
                 }
             }
         }
