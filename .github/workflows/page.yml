@@ -1,0 +1,40 @@
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install
+        run: |
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+          rustup toolchain install nightly
+          rustup default nightly
+      - name: Test
+        run: cargo test
+      - name: Build
+        run: |
+          cd rustlisp-wasm
+          wasm-pack build --target web
+          mkdir artifacts
+          cp -r pkg artifacts/
+          cp index.html artifacts/
+      - name: Upload artifacts
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: rustlisp-wasm/artifacts/
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy pages
+        uses: actions/deploy-pages@v4
