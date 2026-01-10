@@ -1,6 +1,6 @@
 use rustyline::error::ReadlineError;
 
-use rust_lisp::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+use rustlisp::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 
 fn main() -> rustyline::Result<()> {
     let mut rl = rustyline::DefaultEditor::new()?;

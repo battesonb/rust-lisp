@@ -1,0 +1,12 @@
+[package]
+name = "rustlisp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+predicates = "3.1.3"
+rustyline = "17.0.2"
+thiserror = "2.0.17"
+
+[dev-dependencies]
+assert_cmd = "2.1.1"

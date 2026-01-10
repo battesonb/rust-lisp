@@ -1,6 +1,6 @@
 use std::io::BufRead;
 
-use rust_lisp::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+use rustlisp::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 
 fn main() {
     let stdin = std::io::stdin().lock();
