@@ -1,4 +1,8 @@
-use rustlisp::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+use rustlisp::{
+    interpreter::{Interpreter, InterpreterConfig},
+    lexer::Lexer,
+    parser::Parser,
+};
 use wasm_bindgen::prelude::*;
 
 const EXAMPLE: &'static str = r#"(defun fact (n)
@@ -43,7 +47,21 @@ fn main() -> Result<(), JsValue> {
         }
     };
 
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new(InterpreterConfig {
+        stdout: {
+            let output = output.clone();
+            Box::new(move |str: String| {
+                if let Some(original) = output.text_content()
+                    && !original.is_empty()
+                {
+                    output.set_text_content(Some(&format!("{}\n{}", original, str)));
+                } else {
+                    output.set_text_content(Some(&str));
+                }
+            })
+        },
+        ..Default::default()
+    });
     interpreter.load_std();
 
     let submit_callback = Closure::<dyn FnMut(_)>::new(move |_: web_sys::MouseEvent| {
@@ -77,8 +95,6 @@ fn main() -> Result<(), JsValue> {
     });
     submit.add_event_listener_with_callback("click", submit_callback.as_ref().unchecked_ref())?;
     submit_callback.forget();
-
-    // output.set_inner_html("Hello from Rust!");
 
     Ok(())
 }

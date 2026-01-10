@@ -60,15 +60,39 @@ pub struct Interpreter {
     context_stack: Vec<(Value, Value)>,
     active_scope_stack: Vec<Rc<RefCell<Box<Scope>>>>,
     native_functions: HashMap<Cow<'static, str>, Value>,
+    /// A function representing printing to stdout for wherever this interpreter is deployed.
+    pub stdout: Box<dyn Fn(String) -> ()>,
+}
+
+pub struct InterpreterConfig {
+    /// A function representing printing to stdout for wherever this interpreter is deployed.
+    pub stdout: Box<dyn Fn(String) -> ()>,
+}
+
+impl Default for InterpreterConfig {
+    fn default() -> Self {
+        Self {
+            stdout: Box::new(|str: String| print!("{str}")),
+        }
+    }
+}
+
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self::new(InterpreterConfig::default())
+    }
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
+    pub fn new(config: InterpreterConfig) -> Self {
+        let InterpreterConfig { stdout } = config;
+
         let root_scope = Rc::new(RefCell::new(Box::new(Scope::default())));
         Self {
             context_stack: Vec::new(),
             active_scope_stack: vec![root_scope],
             native_functions: build_native_function_map(),
+            stdout,
         }
     }
 
@@ -203,6 +227,10 @@ impl Interpreter {
             self.evaluate(value)
                 .expect(&format!("Statement {} of std failed", i + 1));
         }
+    }
+
+    pub fn stdout(&self, str: String) {
+        (self.stdout)(str)
     }
 
     pub(crate) fn set_value(&mut self, symbol: Symbol, value: Value) -> NativeResult<()> {

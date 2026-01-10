@@ -25,7 +25,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::default();
     interpreter.load_std();
 
     for value in statements {

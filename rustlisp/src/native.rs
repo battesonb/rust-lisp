@@ -895,7 +895,7 @@ pub fn print(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Va
 
     let value = interpreter.evaluate(*value)?;
 
-    println!("{value}");
+    interpreter.stdout(format!("{value}\n"));
 
     Ok(value)
 }

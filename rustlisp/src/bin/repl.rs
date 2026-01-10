@@ -6,7 +6,7 @@ fn main() -> rustyline::Result<()> {
     let mut rl = rustyline::DefaultEditor::new()?;
     let _ = rl.load_history("./rustlisp_history.txt");
 
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::default();
     interpreter.load_std();
 
     loop {
