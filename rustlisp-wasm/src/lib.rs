@@ -58,6 +58,17 @@ const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
 (print (count))"#
                 .into(),
         ),
+        (
+            "Traces".into(),
+            r#"; Errors show traces for context. Aliased native functions will also show their
+; original name. This specific view of the interpreter shows the result of the
+; last successful expression, which is the `(setq multiply *)` expression.
+
+(setq multiply *)
+(setq x
+  (+ (multiply 10 (error "boom!"))))"#
+                .into(),
+        ),
         ("Empty".into(), "".into()),
     ]
 });
