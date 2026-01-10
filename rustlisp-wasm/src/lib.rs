@@ -147,9 +147,9 @@ fn main() -> Result<(), JsValue> {
             if let Some(original) = error.text_content()
                 && !original.is_empty()
             {
-                error.set_text_content(Some(&format!("{}\n{}", original, text.trim())));
+                error.set_text_content(Some(&format!("{}{}", original, text)));
             } else {
-                error.set_text_content(Some(&text.trim()));
+                error.set_text_content(Some(&text));
             }
         }
     };
@@ -161,7 +161,7 @@ fn main() -> Result<(), JsValue> {
                 if let Some(original) = output.text_content()
                     && !original.is_empty()
                 {
-                    output.set_text_content(Some(&format!("{}\n{}", original, str)));
+                    output.set_text_content(Some(&format!("{}{}", original, str)));
                 } else {
                     output.set_text_content(Some(&str));
                 }
