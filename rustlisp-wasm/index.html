@@ -1,0 +1,59 @@
+<html>
+  <head>
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+  </head>
+  <body style="display: flex; flex-direction: column; align-items: center;">
+    <div style="display: flex; gap: 0.5em; flex-direction: column; width: 100%; max-width: 968px;">
+      <div style="display: flex; justify-content: space-between;">
+        <span style="font-weight: bold; margin: 0.25em 0;">> rustlisp</span>
+        <a href="https://github.com/battesonb/rust-lisp" target="_blank" style="margin: 0.25em 0;">see source for syntax</a>
+      </div>
+      <textarea id="input" rows=10 style="resize: none;"></textarea>
+      <button id="submit">Submit</button>
+      <code id="output"></code>
+    </div>
+
+    <style>
+    * {
+      font-family: monospace;
+      font-size: 18px;
+    }
+    </style>
+
+    <script type="module">
+    import init, { /* exported functions */ } from './pkg/rustlisp_wasm.js';
+
+    async function run() {
+      // First up we need to actually load the Wasm file, so we use the
+      // default export to inform it where the Wasm file is located on the
+      // server, and then we wait on the returned promise to wait for the
+      // Wasm to be loaded.
+      //
+      // It may look like this: `await init('./without_a_bundler_bg.wasm');`,
+      // but there is also a handy default inside `init` function, which uses
+      // `import.meta` to locate the Wasm file relatively to js file.
+      //
+      // Note that instead of a string you can also pass in any of the
+      // following things:
+      //
+      // * `WebAssembly.Module`
+      //
+      // * `ArrayBuffer`
+      //
+      // * `Response`
+      //
+      // * `Promise` which returns any of the above, e.g. `fetch("./path/to/wasm")`
+      //
+      // This gives you complete control over how the module is loaded
+      // and compiled.
+      //
+      // Also note that the promise, when resolved, yields the Wasm module's
+      // exports which is the same as importing the `*_bg` module in other
+      // modes
+      await init();
+    }
+
+    run();
+    </script>
+  </body>
+</html>
