@@ -1,8 +1,10 @@
 # Rust Lisp
 
+[View the web demo!](https://battesonb.github.io/rust-lisp/)
+
 An attempt at writing a Lisp lexer, parser and interpreter as a simple learning
-experience! However, the interpreter hides a lot of complexity relating to making the
-language compile.
+experience! However, the interpreter hides a lot of complexity relating to
+making the language compile.
 
 This follows some of the syntax and semantics from Common Lisp, but not all
 of it. See the tests directory for expected deviations. The attempt here is to
