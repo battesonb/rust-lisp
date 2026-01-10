@@ -2,9 +2,9 @@ use rustlisp::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 use wasm_bindgen::prelude::*;
 
 const EXAMPLE: &'static str = r#"(defun fact (n)
-    (if (<= n 1)
-        1
-        (* n (fact (- n 1)))))
+  (if (<= n 1)
+    1
+    (* n (fact (- n 1)))))
 (print (fact 5))"#;
 
 #[wasm_bindgen(start)]
