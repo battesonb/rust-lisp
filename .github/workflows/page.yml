@@ -22,6 +22,7 @@ jobs:
           mkdir artifacts
           cp -r pkg artifacts/
           cp index.html artifacts/
+          cp favicon.svg artifacts/
       - name: Upload artifacts
         uses: actions/upload-pages-artifact@v4
         with:

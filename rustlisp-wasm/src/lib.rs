@@ -30,6 +30,22 @@ const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
 (print (fib 7)) ; beware, a bigger number can lock up your browser"#
                 .into(),
         ),
+        ( "Fibonacci (Memoized)".into(), r#"(defun fib (n)
+  (fib-internal n (make-hash-table)))
+
+(defun fib-internal (n memo)
+  (if (<= n 1)
+    n
+    (let ((a (gethash memo (- n 1)))
+          (b (gethash memo (- n 2))))
+      (progn
+        (if (null a) (setq a (fib-internal (- n 1) memo)) nil)
+        (if (null b) (setq b (fib-internal (- n 2) memo)) nil)
+        (let ((sum (+ a b)))
+          (sethash memo n sum)
+          sum)))))
+
+(print (fib 80)) ; Supports a much bigger input than the naive method"#.into()),
         (
             "Object".into(),
             r#"(defun make-account(balance)
