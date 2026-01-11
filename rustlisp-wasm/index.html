@@ -2,38 +2,133 @@
   <head>
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
     <meta name="viewport" content="width=device-width" />
-  </head>
-  <body style="display: flex; flex-direction: column; align-items: center;">
-    <div style="display: flex; gap: 0.5em; flex-direction: column; width: 100%; max-width: 968px; height: 100%;">
-      <div style="display: flex; justify-content: space-between;">
-        <span style="font-weight: bold; margin: 0.25em 0;">> rustlisp</span>
-        <a href="https://github.com/battesonb/rust-lisp" target="_blank" style="margin: 0.25em 0;">see source for syntax</a>
-      </div>
-      <select id="select"></select>
-      <textarea id="input" rows=16 style="resize: none;"></textarea>
-      <button id="submit">Submit</button>
-      <div style="display: flex; flex-direction: row; border-bottom: 1px solid #AAA; padding-bottom: 0.5em;">
-        <strong style="margin-bottom: 0.25em" title="The result of the last successful expression">Expression:&nbsp;</strong>
-        <pre style="margin: 0;" id="expression"></pre>
-      </div>
-      <div style="display: flex; flex: 1;">
-        <div style="flex: 1; display: flex; flex-direction: column;">
-          <strong style="margin-bottom: 0.25em" title="Represents standard output">Output</strong>
-          <pre style="margin: 0;" id="output"></pre>
-        </div>
-        <div style="flex: 1; display: flex; flex-direction: column; border-left: 1px solid #AAA; padding-left: 0.5em;">
-          <strong style="margin-bottom: 0.25em" title="Represents standard error">Error</strong>
-          <pre style="margin: 0; color: white; background-color: #f04f43;" id="error"></pre>
-        </div>
-      </div>
-    </div>
-
+    <title>rustlisp</title>
+    <link rel="icon" href="favicon.svg" sizes="any" type="image/svg+xml">
     <style>
     * {
       font-family: monospace;
       font-size: 16px;
     }
+
+    html {
+      padding: 0.5em;
+    }
+
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5em;
+      height: 100%;
+      max-height: 100%;
+    }
+
+    .container {
+      display: flex;
+      flex: 1;
+      gap: 0.5em;
+      width: 100%;
+      max-height: 100%;
+    }
+
+    .code {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+      flex: 1;
+    }
+
+    .state {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      gap: 0.5em;
+      height: 100%;
+    }
+
+    .expression {
+      display: flex;
+      flex-direction: row;
+      border-bottom: 1px solid #AAA;
+      padding-bottom: 0.5em;
+    }
+
+    .output {
+      display: flex;
+      height: 100%;
+      max-height: 100%;
+      flex: 1;
+    }
+
+    .stdout {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 50%;
+    }
+
+    .stderr {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 50%;
+      border-left: 1px solid #AAA;
+      padding-left: 0.5em;
+    }
+
+    @media (orientation: portrait) {
+      .container {
+        flex-direction: column;
+      }
+
+      .state {
+        max-height: 50%;
+      }
+    }
+
+    @media (orientation: landscape) {
+      .container {
+        flex-direction: row;
+      }
+
+      .code {
+        flex: 1;
+      }
+    }
     </style>
+  </head>
+  <body>
+    <div style="display: flex; width: 100%; justify-content: space-between;">
+      <span style="font-weight: bold; margin: 0.25em 0;">> rustlisp</span>
+      <a href="https://github.com/battesonb/rust-lisp" target="_blank" style="margin: 0.25em 0;">see source for syntax</a>
+    </div>
+    <div class="container">
+      <div class="code">
+        <select id="select"></select>
+        <textarea id="input" style="resize: none; flex: 1;"></textarea>
+        <button id="submit">Submit</button>
+      </div>
+      <div class="state">
+        <div class="expression">
+          <strong style="margin-bottom: 0.25em" title="The result of the last successful expression">Expression:&nbsp;</strong>
+          <pre style="margin: 0;" id="expression"></pre>
+        </div>
+        <div class="output">
+          <div class="stdout">
+            <strong style="margin-bottom: 0.25em" title="Represents standard output">Output</strong>
+            <pre style="margin: 0; flex: 1; overflow: scroll;" id="output"></pre>
+          </div>
+          <div class="stderr">
+            <strong style="margin-bottom: 0.25em" title="Represents standard error">Error</strong>
+            <span style="display: flex; flex: 1; flex-direction: column; flex-wrap: wrap; height: 100%; overflow: scroll;">
+              <pre style="margin: 0; color: white; background-color: #f04f43;" id="error"></pre>
+              <span style="flex: 1;"></span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script type="module">
     import init, { /* exported functions */ } from './pkg/rustlisp_wasm.js';

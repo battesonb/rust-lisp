@@ -15,6 +15,7 @@ const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
   (if (<= n 1)
     1
     (* n (fact (- n 1)))))
+
 (print (fact 5))"#
                 .into(),
         ),
@@ -25,7 +26,8 @@ const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     n
     (+ (fib (- n 1))
        (fib (- n 2)))))
-  (print (fib 7)) ; beware, a bigger number can lock up your browser"#
+
+(print (fib 7)) ; beware, a bigger number can lock up your browser"#
                 .into(),
         ),
         (
@@ -66,7 +68,7 @@ const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
 
 (setq multiply *)
 (setq x
-  (+ (multiply 10 (error "boom!"))))"#
+  (<= (multiply 10 (error "boom!"))))"#
                 .into(),
         ),
         ("Empty".into(), "".into()),
