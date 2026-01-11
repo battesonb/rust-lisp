@@ -711,32 +711,29 @@ pub fn and(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Valu
 
 /// Signature:
 ///
-/// (if <COND_EXPR> <TRUE_EXPR> <FALSE_EXPR>) -> <TRUE_EXPR>
+/// (if <COND_EXPR> <TRUE_EXPR> &rest <FALSE_EXPRS>) -> VALUE
 ///
 /// If is special in that it "short-circuits" the evaluation only to the branch that is followed.
+/// The return value is the result of <TRUE_EXPR> or the last expression in <FALSE_EXPRS>.
 pub fn if_native(interpreter: &mut Interpreter, rest: Value) -> InterpreterResult<Value> {
     let ConsCell { value: test, rest } = rest
         .expect_cons_cell()
         .into_interpreter_result(interpreter)?;
-    let ConsCell { value: pass, rest } = rest
+    let ConsCell {
+        value: pass,
+        rest: fail,
+    } = rest
         .expect_cons_cell()
         .into_interpreter_result(interpreter)?;
-    let ConsCell { value: fail, rest } = rest
-        .expect_cons_cell()
-        .into_interpreter_result(interpreter)?;
-
-    if !rest.is_nil() {
-        return Err(NativeError::InvalidExactArgumentCount {
-            name: "if".into(),
-            expected: 3,
-        })
-        .into_interpreter_result(interpreter);
-    }
 
     let test = interpreter.evaluate(*test)?;
     let test = test.is_true();
 
-    interpreter.evaluate(if test { *pass } else { *fail })
+    if test {
+        interpreter.evaluate(*pass)
+    } else {
+        progn(interpreter, *fail)
+    }
 }
 
 /// Signature:

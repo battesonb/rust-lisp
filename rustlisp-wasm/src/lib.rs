@@ -30,7 +30,9 @@ const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
 (print (fib 7)) ; beware, a bigger number can lock up your browser"#
                 .into(),
         ),
-        ( "Fibonacci (Memoized)".into(), r#"(defun fib (n)
+        (
+            "Fibonacci (Memoized)".into(),
+            r#"(defun fib (n)
   (fib-internal n (make-hash-table)))
 
 (defun fib-internal (n memo)
@@ -39,21 +41,28 @@ const EXAMPLES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     (let ((a (gethash memo (- n 1)))
           (b (gethash memo (- n 2))))
       (progn
-        (if (null a) (setq a (fib-internal (- n 1) memo)) nil)
-        (if (null b) (setq b (fib-internal (- n 2) memo)) nil)
+        (if (null a) (setq a (fib-internal (- n 1) memo)))
+        (if (null b) (setq b (fib-internal (- n 2) memo)))
         (let ((sum (+ a b)))
           (sethash memo n sum)
           sum)))))
 
-(print (fib 80)) ; Supports a much bigger input than the naive method"#.into()),
+(print (fib 80)) ; Supports a much bigger input than the naive method"#
+                .into(),
+        ),
         (
             "Object".into(),
             r#"(defun make-account(balance)
   (lambda (operation &rest args)
-    (cond ((= operation (quote deposit)) (setq balance (+ balance (car args))))
-          ((= operation (quote withdraw)) (setq balance (- balance (car args))))
-          ((= operation (quote check)) balance)
-          (t (error "unexpected operation")))))
+    (cond
+      ((= operation (quote deposit))
+       (setq balance (+ balance (car args))))
+      ((= operation (quote withdraw))
+       (setq balance (- balance (car args))))
+      ((= operation (quote check))
+       balance)
+      (t
+       (error "unexpected operation")))))
 
 (setq account (make-account 0))
 

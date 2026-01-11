@@ -46,17 +46,14 @@
     (let ((head (car lst)))
       (if head
         (if (= (car head) value) head
-          (assoc (cdr lst) value))
-        nil))
-    nil))
+          (assoc (cdr lst) value))))))
 
 ; Define the list map function
 (defun mapcar (func lst)
   (if lst
     (cons
       (eval (list func (car lst)))
-      (mapcar func (cdr lst)))
-    nil))
+      (mapcar func (cdr lst)))))
 
 ; Define the list filter function
 (defun filter (func lst)
@@ -64,8 +61,7 @@
     (let ((head (car lst)))
       (if (eval (list func head))
         (cons head (filter func (cdr lst)))
-        (filter func (cdr lst))))
-    nil))
+        (filter func (cdr lst))))))
 
 ; Define the list reduce function. The func parameter can either be a Lambda or a symbol
 ; representing a Lambda bound to a variable.
@@ -77,8 +73,7 @@
         (let ((b (car rest))
               (trail (cdr rest)))
           (reduce func (cons (eval (list func a b)) trail)))
-        a))
-    nil))
+        a))))
 
 ; Gets the nth element from a linked list in O(n) time.
 (defun nth (index lst)
