@@ -44,7 +44,7 @@ fn it_can_use_stateful_functions_to_simulate_objects() {
         r#"ERROR: "unexpected operation"
 TRACE:
 1. print <NATIVE-FUNCTION print>
-2. account <FUNCTION (operation)>
+2. account <FUNCTION (operation &rest args)>
 3. cond <NATIVE-FUNCTION cond>
 4. error <NATIVE-FUNCTION error>
 "#,
@@ -78,7 +78,7 @@ fn it_can_use_stateful_functions_with_hash_tables_to_simulate_objects() {
         r#"ERROR: "unexpected operation"
 TRACE:
 1. print <NATIVE-FUNCTION print>
-2. account <FUNCTION (operation)>
+2. account <FUNCTION (operation &rest args)>
 3. let <NATIVE-FUNCTION let>
 4. if <NATIVE-FUNCTION if>
 5. error <NATIVE-FUNCTION error>

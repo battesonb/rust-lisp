@@ -180,15 +180,29 @@ impl Display for Value {
             Value::Symbol(symbol) => symbol.fmt(f),
             Value::ConsCell(cell) => cell.fmt(f),
             Value::Number(value) => write!(f, "{value}"),
-            Value::Function(FunctionValue { params, .. }) => write!(
-                f,
-                "<FUNCTION ({})>",
-                params
-                    .iter()
-                    .map(Symbol::as_str)
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            ),
+            Value::Function(FunctionValue {
+                params,
+                rest_argument,
+                ..
+            }) => {
+                write!(
+                    f,
+                    "<FUNCTION ({}",
+                    params
+                        .iter()
+                        .map(Symbol::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                )?;
+                if let Some(rest) = rest_argument {
+                    if params.len() > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "&rest {rest}")?;
+                }
+                write!(f, ")>")?;
+                Ok(())
+            }
             Value::Macro(MacroValue { name, params, .. }) => write!(
                 f,
                 "<MACRO {} ({})>",
